@@ -26,6 +26,7 @@ structure GameState where
   velocityY : Float := 0.0
   velocityZ : Float := 0.0
   isGrounded : Bool := false
+  flyMode : Bool := true  -- Start in fly mode (no physics)
   deriving Inhabited
 
 namespace GameState

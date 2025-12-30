@@ -108,20 +108,24 @@ def main : IO Unit := do
     let pitch := pitchClamp (state.camera.pitch - input.mouseDeltaY * state.camera.lookSensitivity)
     state := { state with camera := { state.camera with yaw, pitch } }
 
-    -- Update physics (gravity, collision, movement)
-    let (newX, newY, newZ, newVx, newVy, newVz, nowGrounded) :=
-      Cairn.Physics.updatePlayer state.world
-        state.camera.x state.camera.y state.camera.z
-        state.velocityX state.velocityY state.velocityZ state.isGrounded
-        yaw input dt
-
-    state := { state with
-      camera := { state.camera with x := newX, y := newY, z := newZ }
-      velocityX := newVx
-      velocityY := newVy
-      velocityZ := newVz
-      isGrounded := nowGrounded
-    }
+    -- Update movement (fly mode or physics)
+    if state.flyMode then
+      let (newX, newY, newZ) := Cairn.Physics.updatePlayerFly
+        state.camera.x state.camera.y state.camera.z yaw input dt
+      state := { state with camera := { state.camera with x := newX, y := newY, z := newZ } }
+    else
+      let (newX, newY, newZ, newVx, newVy, newVz, nowGrounded) :=
+        Cairn.Physics.updatePlayer state.world
+          state.camera.x state.camera.y state.camera.z
+          state.velocityX state.velocityY state.velocityZ state.isGrounded
+          yaw input dt
+      state := { state with
+        camera := { state.camera with x := newX, y := newY, z := newZ }
+        velocityX := newVx
+        velocityY := newVy
+        velocityZ := newVz
+        isGrounded := nowGrounded
+      }
 
     -- Raycast for block targeting (used for both actions and debug display)
     let raycastHit : Option RaycastHit :=

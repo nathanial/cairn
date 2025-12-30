@@ -156,9 +156,46 @@ def moveZ (world : World) (x y z vz : Float) (hw hh : Float) (dt : Float)
 
   return (finalZ, finalVz)
 
+def flySpeed : Float := 10.0  -- Faster in fly mode
+
+/-- Update player in fly mode (no gravity, no collisions) -/
+def updatePlayerFly (camX camY camZ : Float) (yaw : Float) (input : InputState) (dt : Float)
+    : Float × Float × Float := Id.run do
+  -- Calculate forward/right vectors
+  let fwdX := Float.sin yaw
+  let fwdZ := -Float.cos yaw
+  let rightX := Float.cos yaw
+  let rightZ := Float.sin yaw
+
+  -- Horizontal movement
+  let mut moveX := 0.0
+  let mut moveZ := 0.0
+  if input.forward then moveX := moveX + fwdX; moveZ := moveZ + fwdZ
+  if input.back then moveX := moveX - fwdX; moveZ := moveZ - fwdZ
+  if input.right then moveX := moveX + rightX; moveZ := moveZ + rightZ
+  if input.left then moveX := moveX - rightX; moveZ := moveZ - rightZ
+
+  -- Normalize horizontal
+  let len := Float.sqrt (moveX * moveX + moveZ * moveZ)
+  if len > 0.001 then
+    moveX := moveX / len
+    moveZ := moveZ / len
+
+  -- Vertical movement (space/E = up, Q = down)
+  let mut moveY := 0.0
+  if input.jump || input.up then moveY := moveY + 1.0
+  if input.down then moveY := moveY - 1.0
+
+  -- Apply movement
+  let newX := camX + moveX * flySpeed * dt
+  let newY := camY + moveY * flySpeed * dt
+  let newZ := camZ + moveZ * flySpeed * dt
+
+  return (newX, newY, newZ)
+
 /-- Update player physics for one frame -/
 def updatePlayer (world : World)
-    (camX camY camZ : Float) (vx vy vz : Float) (grounded : Bool)
+    (camX camY camZ : Float) (_vx vy _vz : Float) (grounded : Bool)
     (yaw : Float) (input : InputState) (dt : Float)
     : Float × Float × Float × Float × Float × Float × Bool := Id.run do
 
@@ -200,12 +237,12 @@ def updatePlayer (world : World)
 
   -- Move and collide on each axis (Y first for ground detection)
   let (newFeetY, finalVy, nowGrounded) := moveY world camX feetY camZ newVy playerWidth playerHeight dt
-  let (newX, finalVx) := moveX world camX newFeetY camZ newVx playerWidth playerHeight dt
-  let (newZ, finalVz) := moveZ world newX newFeetY camZ newVz playerWidth playerHeight dt
+  let (newX, _) := moveX world camX newFeetY camZ newVx playerWidth playerHeight dt
+  let (newZ, _) := moveZ world newX newFeetY camZ newVz playerWidth playerHeight dt
 
   -- Convert feet back to camera position
   let newCamY := newFeetY + eyeOffset
 
-  return (newX, newCamY, newZ, finalVx, finalVy, finalVz, nowGrounded)
+  return (newX, newCamY, newZ, newVx, newVy, finalVy, nowGrounded)
 
 end Cairn.Physics
