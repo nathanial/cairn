@@ -47,9 +47,8 @@ def ensureMesh (world : World) (pos : ChunkPos) : World :=
     if !(chunk ^. chunkIsDirty) && (world ^? meshAt pos).isSome then world
     else
       let mesh := ChunkMesh.generate chunk (getNeighborBlock world)
-      let updatedChunk := chunk & chunkIsDirty .~ false
       world
-        & worldChunks %~ (·.insert pos updatedChunk)
+        & chunkAt pos ∘ chunkIsDirty .~ false
         & worldMeshes %~ (·.insert pos mesh)
   ) |>.getD world
 
