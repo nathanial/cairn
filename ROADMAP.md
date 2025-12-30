@@ -378,10 +378,10 @@ Currently each cube is drawn with a separate `drawMesh3D` call. For better perfo
 These items can be addressed quickly with minimal risk:
 
 1. ~~Add `test.sh` script~~ ✅
-2. Update README Lean version (4.16.0 -> 4.26.0)
-3. Add doc comments to Camera.lean constants
-4. Implement or remove `coloredCubeAt` stub
-5. Add comprehensive Block enum tests
+2. ~~Update README Lean version (4.16.0 -> 4.26.0)~~ ✅
+3. ~~Add doc comments to Camera.lean constants~~ ✅
+4. ~~Implement or remove `coloredCubeAt` stub~~ ✅ (removed - ChunkMesh handles colored faces)
+5. ~~Add comprehensive Block enum tests~~ ✅ (10 tests covering all block types)
 6. ~~Add Face enum for future face-specific colors~~ ✅ (added in ChunkMesh.lean)
 
 ---

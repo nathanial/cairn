@@ -11,7 +11,7 @@ A Minecraft-style voxel game written in Lean 4 using [Afferent](https://github.c
 ## Requirements
 
 - macOS (Metal rendering)
-- Lean 4.16.0
+- Lean 4.26.0
 - Homebrew dependencies: `freetype`, `assimp`
 
 ## Building

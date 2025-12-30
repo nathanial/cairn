@@ -20,9 +20,13 @@ def defaultCamera : FPSCamera := {
   lookSensitivity := 0.002
 }
 
-/-- Camera configuration constants -/
-def fovY : Float := Float.pi / 3.0  -- 60 degrees
+/-- Vertical field of view in radians (60 degrees) -/
+def fovY : Float := Float.pi / 3.0
+
+/-- Near clipping plane distance in world units -/
 def nearPlane : Float := 0.1
+
+/-- Far clipping plane distance in world units (determines view distance) -/
 def farPlane : Float := 500.0
 
 end Cairn.Camera
