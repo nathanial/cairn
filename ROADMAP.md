@@ -209,19 +209,15 @@ This document tracks improvement opportunities, feature proposals, and code clea
 
 ## Code Improvements
 
-### [Priority: High] Extract Game State Structure
+### ~~[Priority: High] Extract Game State Structure~~ ✅ COMPLETED
 
-**Current State:** Game state (camera, time) is tracked via local `mut` variables in `Main.lean`.
+**Status:** Implemented in December 2025.
 
-**Proposed Change:** Create a `GameState` structure containing all mutable state (camera, world, time, input state). Use a proper state monad or pass state explicitly.
+**What was built:**
+- `Cairn/State/GameState.lean` - GameState structure with camera, world, lastTime
+- Refactored `Main.lean` to use single `let mut state : GameState`
 
 **Benefits:** Cleaner code organization, easier testing, foundation for save/load.
-
-**Affected Files:**
-- New file: `Cairn/State/GameState.lean`
-- `Main.lean` (refactor to use GameState)
-
-**Estimated Effort:** Small
 
 ---
 
@@ -392,7 +388,7 @@ These items can be addressed quickly with minimal risk:
 - [x] Chunk data structure
 - [x] Basic chunk meshing
 - [x] Single chunk rendering
-- [ ] Extract GameState structure
+- [x] Extract GameState structure
 
 ### Milestone 2: Infinite World ✅ COMPLETED
 - [x] Multiple chunk loading/unloading
@@ -417,4 +413,4 @@ These items can be addressed quickly with minimal risk:
 
 ---
 
-*Last updated: 2025-12-29 (Chunk system and terrain generation completed)*
+*Last updated: 2025-12-30 (Milestone 1 completed with GameState extraction)*

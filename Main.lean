@@ -8,6 +8,7 @@ import Cairn
 open Afferent Afferent.FFI Afferent.Render
 open Linalg
 open Cairn.World
+open Cairn.State
 
 /-- macOS key codes for WASD + Q/E movement -/
 def keyW : UInt16 := 13
@@ -43,10 +44,7 @@ def main : IO Unit := do
   -- Create window
   let mut canvas ← Canvas.create physWidth physHeight "Cairn"
 
-  -- Initialize camera (start above terrain)
-  let mut camera := { Cairn.Camera.defaultCamera with y := 60.0 }
-
-  -- Initialize world with terrain
+  -- Initialize game state
   let terrainConfig : TerrainConfig := {
     seed := 42
     seaLevel := 32
@@ -57,13 +55,9 @@ def main : IO Unit := do
     caveScale := 0.05
   }
 
-  -- Start with render distance of 2 (5x5 = 25 chunks)
-  let mut world := World.empty terrainConfig 2
+  let mut state ← GameState.create terrainConfig
 
   IO.println s!"Generating initial terrain..."
-
-  -- Track time for delta calculation
-  let mut lastTime ← IO.monoMsNow
 
   -- Main game loop
   while !(← canvas.shouldClose) do
@@ -71,8 +65,8 @@ def main : IO Unit := do
 
     -- Calculate delta time
     let now ← IO.monoMsNow
-    let dt := (now - lastTime).toFloat / 1000.0
-    lastTime := now
+    let dt := (now - state.lastTime).toFloat / 1000.0
+    state := { state with lastTime := now }
 
     -- Handle pointer lock (for FPS camera)
     let mut locked ← FFI.Window.getPointerLock canvas.ctx.window
@@ -111,12 +105,12 @@ def main : IO Unit := do
         pure (0.0, 0.0)
 
     -- Update camera
-    camera := camera.update dt wDown sDown aDown dDown eDown qDown dx dy
+    state := { state with camera := state.camera.update dt wDown sDown aDown dDown eDown qDown dx dy }
 
     -- Update world chunks based on camera position
-    let playerX := camera.x.floor.toInt64.toInt
-    let playerZ := camera.z.floor.toInt64.toInt
-    world := world.loadChunksAround playerX playerZ
+    let playerX := state.camera.x.floor.toInt64.toInt
+    let playerZ := state.camera.z.floor.toInt64.toInt
+    state := { state with world := state.world.loadChunksAround playerX playerZ }
 
     -- Begin frame with sky blue background
     let ok ← canvas.beginFrame (Color.rgba 0.5 0.7 1.0 1.0)
@@ -128,14 +122,14 @@ def main : IO Unit := do
 
       -- Setup projection and view matrices
       let proj := Mat4.perspective Cairn.Camera.fovY aspect Cairn.Camera.nearPlane Cairn.Camera.farPlane
-      let view := camera.viewMatrix
+      let view := state.camera.viewMatrix
 
       -- Light direction (from upper-right-front, normalized)
       let lightDir := #[0.5, 0.8, 0.3]
       let ambient := 0.4
 
       -- Render all chunk meshes
-      for (_, mesh) in world.getMeshes do
+      for (_, mesh) in state.world.getMeshes do
         if mesh.indexCount > 0 then
           -- Model matrix is identity (world positions already in vertices)
           let model := Mat4.identity

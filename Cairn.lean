@@ -16,5 +16,8 @@ import Cairn.World.World
 import Cairn.Camera
 import Cairn.Mesh
 
+-- State
+import Cairn.State.GameState
+
 -- Optics (profunctor lenses for data access)
 import Cairn.Optics
