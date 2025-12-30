@@ -7,6 +7,7 @@ import Cairn
 
 open Afferent Afferent.FFI Afferent.Render
 open Linalg
+open Cairn.Core
 open Cairn.World
 open Cairn.State
 open Cairn.Input
@@ -18,7 +19,9 @@ def main : IO Unit := do
   IO.println "  WASD - Move horizontally"
   IO.println "  Q/E  - Move down/up"
   IO.println "  Mouse - Look around (when captured)"
-  IO.println "  Click or Escape - Toggle mouse capture"
+  IO.println "  Left click - Destroy block"
+  IO.println "  Right click - Place stone block"
+  IO.println "  Escape - Release mouse"
   IO.println ""
 
   -- Initialize FFI
@@ -83,6 +86,26 @@ def main : IO Unit := do
         input.forward input.back input.left input.right
         input.up input.down input.mouseDeltaX input.mouseDeltaY
     }
+
+    -- Handle block placement/destruction when pointer is locked
+    if input.pointerLocked then
+      match input.clickEvent with
+      | some ce =>
+        FFI.Window.clearClick canvas.ctx.window
+        let (origin, dir) := cameraRay state.camera
+        match raycast state.world origin dir 5.0 with  -- 5 block reach
+        | some hit =>
+          if ce.button == 0 then
+            -- Left click: destroy block
+            state := { state with world := state.world.setBlock hit.blockPos Block.air }
+          else if ce.button == 1 then
+            -- Right click: place stone block
+            let placePos := hit.adjacentPos
+            let targetBlock := state.world.getBlock placePos
+            if !targetBlock.isSolid then
+              state := { state with world := state.world.setBlock placePos Block.stone }
+        | none => pure ()
+      | none => pure ()
 
     -- Update world chunks based on camera position
     let playerX := state.camera.x.floor.toInt64.toInt

@@ -55,20 +55,18 @@ This document tracks improvement opportunities, feature proposals, and code clea
 
 ---
 
-### [Priority: High] Block Placement and Destruction
+### ~~[Priority: High] Block Placement and Destruction~~ ✅ COMPLETED
 
-**Description:** Allow players to place and destroy blocks using mouse input.
+**Status:** Implemented in December 2025.
 
-**Rationale:** Core Minecraft-style gameplay. Without block manipulation, the game is just a viewer.
+**What was built:**
+- Left click: destroy block (set to air)
+- Right click: place stone block on adjacent face
+- 5 block reach distance (Minecraft-like)
+- Placement validation (only in non-solid blocks)
+- Automatic chunk remeshing via dirty flag
 
-**Affected Files:**
-- New file: `Cairn/Input/BlockAction.lean` (place/destroy logic)
-- `Main.lean` (add mouse button handling, use raycast)
-- `Cairn/World/Chunk.lean` (block modification, dirty flag for remeshing)
-
-**Estimated Effort:** Medium
-
-**Dependencies:** Block raycasting (completed).
+**Implementation:** Added ~15 lines to Main.lean game loop using existing raycast and World.setBlock infrastructure.
 
 ---
 
@@ -399,7 +397,7 @@ These items can be addressed quickly with minimal risk:
 
 ### Milestone 3: Interactivity
 - [x] Block raycasting
-- [ ] Block placement and destruction
+- [x] Block placement and destruction
 - [ ] Block selection highlight
 - [ ] Basic hotbar UI
 
@@ -415,4 +413,4 @@ These items can be addressed quickly with minimal risk:
 
 ---
 
-*Last updated: 2025-12-30 (Block raycasting completed)*
+*Last updated: 2025-12-30 (Block placement and destruction completed)*
