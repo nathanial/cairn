@@ -4,6 +4,7 @@
 import Crucible
 import Cairn
 import Collimator
+import Tests.PhysicsProperties
 
 open Crucible
 open Cairn.Core

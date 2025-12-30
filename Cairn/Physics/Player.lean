@@ -26,11 +26,11 @@ def playerHeight : Float := 1.8      -- AABB height
 def eyeOffset : Float := 1.6         -- camera Y from feet
 
 /-- Convert Int to Float -/
-private def intToFloat (i : Int) : Float :=
+def intToFloat (i : Int) : Float :=
   if i >= 0 then i.toNat.toFloat else -((-i).toNat.toFloat)
 
 /-- Clamp a Float to a range -/
-private def clamp (v lo hi : Float) : Float :=
+def clamp (v lo hi : Float) : Float :=
   if v < lo then lo else if v > hi then hi else v
 
 /-- Get all block positions that an AABB might intersect -/
