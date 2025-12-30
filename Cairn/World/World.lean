@@ -27,15 +27,11 @@ def empty (config : TerrainConfig := {}) (renderDist : Nat := 3) : World :=
 def getBlock (world : World) (pos : BlockPos) : Block :=
   let chunkPos := pos.toChunkPos
   let localPos := pos.toLocalPos
-  match world ^? chunkAt chunkPos with
-  | some chunk => chunk.getBlock localPos
-  | none => Block.air
+  (world ^? chunkAt chunkPos).map (·.getBlock localPos) |>.getD Block.air
 
 /-- Callback for neighbor block lookup during mesh generation -/
 def getNeighborBlock (world : World) (chunkPos : ChunkPos) (localPos : LocalPos) : Block :=
-  match world ^? chunkAt chunkPos with
-  | some chunk => chunk.getBlock localPos
-  | none => Block.air
+  (world ^? chunkAt chunkPos).map (·.getBlock localPos) |>.getD Block.air
 
 /-- Load or generate a chunk -/
 def ensureChunk (world : World) (pos : ChunkPos) : World :=
@@ -47,9 +43,7 @@ def ensureChunk (world : World) (pos : ChunkPos) : World :=
 
 /-- Generate mesh for a chunk if dirty -/
 def ensureMesh (world : World) (pos : ChunkPos) : World :=
-  match world ^? chunkAt pos with
-  | none => world
-  | some chunk =>
+  (world ^? chunkAt pos).map (fun chunk =>
     if !(chunk ^. chunkIsDirty) && (world ^? meshAt pos).isSome then world
     else
       let mesh := ChunkMesh.generate chunk (getNeighborBlock world)
@@ -57,6 +51,7 @@ def ensureMesh (world : World) (pos : ChunkPos) : World :=
       world
         & worldChunks %~ (·.insert pos updatedChunk)
         & worldMeshes %~ (·.insert pos mesh)
+  ) |>.getD world
 
 /-- Get chunk position from world block coordinates -/
 def blockToChunkPos (x z : Int) : ChunkPos :=
@@ -109,11 +104,10 @@ def unloadDistantChunks (world : World) (centerX centerZ : Int) : World :=
 def setBlock (world : World) (pos : BlockPos) (block : Block) : World :=
   let chunkPos := pos.toChunkPos
   let localPos := pos.toLocalPos
-  match world ^? chunkAt chunkPos with
-  | some chunk =>
+  (world ^? chunkAt chunkPos).map (fun chunk =>
     let newChunk := chunk.setBlock localPos block
     world & worldChunks %~ (·.insert chunkPos newChunk)
-  | none => world
+  ) |>.getD world
 
 end World
 
