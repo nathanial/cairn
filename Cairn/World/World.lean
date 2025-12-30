@@ -5,12 +5,14 @@
 import Cairn.World.Types
 import Cairn.World.Terrain
 import Cairn.Optics
+import Cairn.Render.MeshGen
 import Collimator
 
 namespace Cairn.World
 
 open Cairn.Core
 open Cairn.Optics
+open Cairn.Render
 open Collimator
 open scoped Collimator.Operators
 
@@ -27,10 +29,6 @@ def empty (config : TerrainConfig := {}) (renderDist : Nat := 3) : World :=
 def getBlock (world : World) (pos : BlockPos) : Block :=
   world ^?? blockAt pos | Block.air
 
-/-- Callback for neighbor block lookup during mesh generation -/
-def getNeighborBlock (world : World) (chunkPos : ChunkPos) (localPos : LocalPos) : Block :=
-  world ^?? (chunkAt chunkPos ∘ localBlockAt localPos) | Block.air
-
 /-- Load or generate a chunk -/
 def ensureChunk (world : World) (pos : ChunkPos) : World :=
   if (world ^? chunkAt pos).isSome then world
@@ -41,14 +39,15 @@ def ensureChunk (world : World) (pos : ChunkPos) : World :=
 
 /-- Generate mesh for a chunk if dirty -/
 def ensureMesh (world : World) (pos : ChunkPos) : World :=
-  (world ^? chunkAt pos).map (fun chunk =>
-    if !(chunk ^. chunkIsDirty) && (world ^? meshAt pos).isSome then world
-    else
-      let mesh := ChunkMesh.generate chunk (getNeighborBlock world)
-      world
-        & chunkAt pos ∘ chunkIsDirty .~ false
-        & worldMeshes %~ (·.insert pos mesh)
-  ) |>.getD world
+  match world ^? chunkAt pos ∘ chunkIsDirty with
+  | some true =>
+    let mesh := generateMesh world pos
+    world
+      & chunkAt pos ∘ chunkIsDirty .~ false
+      & worldMeshes %~ (·.insert pos mesh)
+  | some false => if (world ^? meshAt pos).isSome then world
+                  else world & worldMeshes %~ (·.insert pos (generateMesh world pos))
+  | none => world
 
 /-- Get chunk position from world block coordinates -/
 def blockToChunkPos (x z : Int) : ChunkPos :=

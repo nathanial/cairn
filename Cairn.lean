@@ -18,6 +18,9 @@ import Cairn.World.Terrain
 import Cairn.World.World
 import Cairn.World.Raycast
 
+-- Render
+import Cairn.Render.MeshGen
+
 -- Utilities
 import Cairn.Camera
 import Cairn.Mesh
