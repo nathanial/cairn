@@ -6,10 +6,13 @@ import Cairn.Core.Block
 import Cairn.Core.Coords
 import Cairn.Core.Face
 import Cairn.World.Chunk
+import Cairn.Optics.Chunk
 
 namespace Cairn.World
 
 open Cairn.Core
+open Cairn.Optics
+open scoped Collimator.Operators
 
 /-- Chunk mesh data ready for GPU -/
 structure ChunkMesh where
@@ -83,26 +86,26 @@ private def getNeighborBlock (chunk : Chunk) (pos : LocalPos) (face : Face)
   match face with
   | .top =>
     if pos.y + 1 >= chunkHeight then Block.air
-    else chunk.getBlock { pos with y := pos.y + 1 }
+    else (chunk ^? localBlockAt { pos with y := pos.y + 1 }).getD Block.air
   | .bottom =>
     if pos.y == 0 then Block.air  -- Render bottom of world
-    else chunk.getBlock { pos with y := pos.y - 1 }
+    else (chunk ^? localBlockAt { pos with y := pos.y - 1 }).getD Block.air
   | .north =>  -- +Z
     if pos.z + 1 >= chunkSize then
       getExternal { chunk.pos with z := chunk.pos.z + 1 } { pos with z := 0 }
-    else chunk.getBlock { pos with z := pos.z + 1 }
+    else (chunk ^? localBlockAt { pos with z := pos.z + 1 }).getD Block.air
   | .south =>  -- -Z
     if pos.z == 0 then
       getExternal { chunk.pos with z := chunk.pos.z - 1 } { pos with z := chunkSize - 1 }
-    else chunk.getBlock { pos with z := pos.z - 1 }
+    else (chunk ^? localBlockAt { pos with z := pos.z - 1 }).getD Block.air
   | .east =>   -- +X
     if pos.x + 1 >= chunkSize then
       getExternal { chunk.pos with x := chunk.pos.x + 1 } { pos with x := 0 }
-    else chunk.getBlock { pos with x := pos.x + 1 }
+    else (chunk ^? localBlockAt { pos with x := pos.x + 1 }).getD Block.air
   | .west =>   -- -X
     if pos.x == 0 then
       getExternal { chunk.pos with x := chunk.pos.x - 1 } { pos with x := chunkSize - 1 }
-    else chunk.getBlock { pos with x := pos.x - 1 }
+    else (chunk ^? localBlockAt { pos with x := pos.x - 1 }).getD Block.air
 
 /-- Check if a face should be rendered (neighbor is air or transparent) -/
 private def shouldRenderFace (chunk : Chunk) (pos : LocalPos) (face : Face)
@@ -122,7 +125,7 @@ def generate (chunk : Chunk)
     for lz in [:chunkSize] do
       for lx in [:chunkSize] do
         let localPos : LocalPos := { x := lx, y := ly, z := lz }
-        let block := chunk.getBlock localPos
+        let block := (chunk ^? localBlockAt localPos).getD Block.air
 
         if block != Block.air && block.isSolid then
           let worldX := intToFloat (chunk.pos.x * chunkSize + lx)

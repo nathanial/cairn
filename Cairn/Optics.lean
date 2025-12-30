@@ -7,7 +7,7 @@ import Collimator.Derive.Lenses
 import Collimator.Combinators
 import Cairn.Core.Coords
 import Cairn.Core.Block
-import Cairn.World.Chunk
+import Cairn.Optics.Chunk
 import Cairn.World.ChunkMesh
 import Cairn.World.Terrain
 import Cairn.World.Types
@@ -19,11 +19,12 @@ open Collimator.Derive
 open Cairn.Core
 open Cairn.World
 
--- Auto-generate lenses for all structures
+-- Auto-generate lenses for coord types
 makeLenses ChunkPos
 makeLenses LocalPos
 makeLenses BlockPos
-makeLenses Chunk
+
+-- Auto-generate lenses for downstream types
 makeLenses ChunkMesh
 makeLenses TerrainConfig
 makeLenses World
@@ -52,16 +53,6 @@ def chunkAt (pos : ChunkPos) : AffineTraversal' World Chunk :=
     at most one ChunkMesh value. -/
 def meshAt (pos : ChunkPos) : AffineTraversal' World ChunkMesh :=
   worldMeshes ∘ Collimator.Indexed.atLens pos ∘ Collimator.Instances.Option.somePrism' ChunkMesh
-
-/-- Affine traversal for accessing a block at a local position within a chunk.
-    Returns none if position is invalid or out of bounds. -/
-def localBlockAt (pos : LocalPos) : AffineTraversal' Chunk Block :=
-  Collimator.Combinators.affineFromPartial
-    (fun chunk => if pos.isValid then chunk.blocks[pos.toIndex]? else none)
-    (fun chunk block =>
-      if pos.isValid && pos.toIndex < chunk.blocks.size then
-        { chunk with blocks := chunk.blocks.set! pos.toIndex block }
-      else chunk)
 
 /-- Affine traversal for accessing a block at a world position.
     Composes chunk lookup with local block access. -/

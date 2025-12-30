@@ -5,11 +5,14 @@
 import Cairn.Core.Block
 import Cairn.Core.Coords
 import Cairn.World.Chunk
+import Cairn.Optics.Chunk
 import Linalg
 
 namespace Cairn.World
 
 open Cairn.Core
+open Cairn.Optics
+open scoped Collimator.Operators
 open Linalg.Noise
 
 /-- Terrain generation configuration -/
@@ -99,8 +102,8 @@ def generateChunk (config : TerrainConfig) (chunkPos : ChunkPos) : Chunk := Id.r
             block
 
         if finalBlock != Block.air then
-          chunk := chunk.setBlock localPos finalBlock
+          chunk := chunk & localBlockAt localPos .~ finalBlock
 
-  { chunk with isDirty := true }
+  chunk & chunkIsDirty .~ true
 
 end Cairn.World
