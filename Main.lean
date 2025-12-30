@@ -1,12 +1,13 @@
 /-
   Cairn - A Minecraft-style voxel game using Afferent
-  Main entry point with game loop, FPS camera, and cube rendering
+  Main entry point with game loop, FPS camera, and chunk-based terrain
 -/
 import Afferent
 import Cairn
 
 open Afferent Afferent.FFI Afferent.Render
 open Linalg
+open Cairn.World
 
 /-- macOS key codes for WASD + Q/E movement -/
 def keyW : UInt16 := 13
@@ -42,8 +43,24 @@ def main : IO Unit := do
   -- Create window
   let mut canvas ← Canvas.create physWidth physHeight "Cairn"
 
-  -- Initialize camera
-  let mut camera := Cairn.Camera.defaultCamera
+  -- Initialize camera (start above terrain)
+  let mut camera := { Cairn.Camera.defaultCamera with y := 60.0 }
+
+  -- Initialize world with terrain
+  let terrainConfig : TerrainConfig := {
+    seed := 42
+    seaLevel := 32
+    baseHeight := 45
+    heightScale := 25.0
+    noiseScale := 0.015
+    caveThreshold := 0.45
+    caveScale := 0.05
+  }
+
+  -- Start with render distance of 2 (5x5 = 25 chunks)
+  let mut world := World.empty terrainConfig 2
+
+  IO.println s!"Generating initial terrain..."
 
   -- Track time for delta calculation
   let mut lastTime ← IO.monoMsNow
@@ -96,6 +113,11 @@ def main : IO Unit := do
     -- Update camera
     camera := camera.update dt wDown sDown aDown dDown eDown qDown dx dy
 
+    -- Update world chunks based on camera position
+    let playerX := camera.x.floor.toInt64.toInt
+    let playerZ := camera.z.floor.toInt64.toInt
+    world := world.loadChunksAround playerX playerZ
+
     -- Begin frame with sky blue background
     let ok ← canvas.beginFrame (Color.rgba 0.5 0.7 1.0 1.0)
 
@@ -112,24 +134,17 @@ def main : IO Unit := do
       let lightDir := #[0.5, 0.8, 0.3]
       let ambient := 0.4
 
-      -- Draw a grid of cubes to test rendering
-      for row in [:5] do
-        for col in [:5] do
-          let x := (col.toFloat - 2.0) * 2.0
-          let z := (row.toFloat - 2.0) * 2.0
-          let y := 0.0
-
-          -- Model matrix: translate to position
-          let model := Mat4.translation x y z
-
-          -- MVP = projection * view * model
+      -- Render all chunk meshes
+      for (_, mesh) in world.getMeshes do
+        if mesh.indexCount > 0 then
+          -- Model matrix is identity (world positions already in vertices)
+          let model := Mat4.identity
           let mvp := proj * view * model
 
-          -- Draw the cube
           Renderer.drawMesh3D
             canvas.ctx.renderer
-            Mesh.cubeVertices
-            Mesh.cubeIndices
+            mesh.vertices
+            mesh.indices
             mvp.toArray
             model.toArray
             lightDir
