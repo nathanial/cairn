@@ -17,6 +17,7 @@ structure InputState where
   right : Bool
   up : Bool
   down : Bool
+  jump : Bool           -- Space key for jumping
   mouseDeltaX : Float
   mouseDeltaY : Float
   escapePressed : Bool
@@ -35,6 +36,7 @@ def capture (window : Window) : IO InputState := do
   let right ← Window.isKeyDown window Keys.d
   let up ← Window.isKeyDown window Keys.e
   let down ← Window.isKeyDown window Keys.q
+  let jump ← Window.isKeyDown window Keys.space
 
   -- Mouse
   let pointerLocked ← Window.getPointerLock window
@@ -54,7 +56,7 @@ def capture (window : Window) : IO InputState := do
   let clickEvent ← Window.getClick window
 
   return {
-    forward, back, left, right, up, down
+    forward, back, left, right, up, down, jump
     mouseDeltaX, mouseDeltaY
     escapePressed, pointerLocked, clickEvent
   }

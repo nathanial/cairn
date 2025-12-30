@@ -16,8 +16,8 @@ def main : IO Unit := do
   IO.println "Cairn - Voxel Game"
   IO.println "=================="
   IO.println "Controls:"
-  IO.println "  WASD - Move horizontally"
-  IO.println "  Q/E  - Move down/up"
+  IO.println "  WASD  - Move horizontally"
+  IO.println "  Space - Jump"
   IO.println "  Mouse - Look around (when captured)"
   IO.println "  Left click - Destroy block"
   IO.println "  Right click - Place selected block"
@@ -99,11 +99,28 @@ def main : IO Unit := do
           FFI.Window.setPointerLock canvas.ctx.window true
       | none => pure ()
 
-    -- Update camera
+    -- Update look direction from mouse
+    let yaw := state.camera.yaw + input.mouseDeltaX * state.camera.lookSensitivity
+    let pitchClamp (v : Float) : Float :=
+      if v < -Float.halfPi * 0.99 then -Float.halfPi * 0.99
+      else if v > Float.halfPi * 0.99 then Float.halfPi * 0.99
+      else v
+    let pitch := pitchClamp (state.camera.pitch - input.mouseDeltaY * state.camera.lookSensitivity)
+    state := { state with camera := { state.camera with yaw, pitch } }
+
+    -- Update physics (gravity, collision, movement)
+    let (newX, newY, newZ, newVx, newVy, newVz, nowGrounded) :=
+      Cairn.Physics.updatePlayer state.world
+        state.camera.x state.camera.y state.camera.z
+        state.velocityX state.velocityY state.velocityZ state.isGrounded
+        yaw input dt
+
     state := { state with
-      camera := state.camera.update dt
-        input.forward input.back input.left input.right
-        input.up input.down input.mouseDeltaX input.mouseDeltaY
+      camera := { state.camera with x := newX, y := newY, z := newZ }
+      velocityX := newVx
+      velocityY := newVy
+      velocityZ := newVz
+      isGrounded := nowGrounded
     }
 
     -- Raycast for block targeting (used for both actions and debug display)

@@ -21,6 +21,11 @@ structure GameState where
   world : World
   lastTime : Nat
   selectedBlock : Block := Block.stone  -- Currently selected block for placement
+  -- Physics state
+  velocityX : Float := 0.0
+  velocityY : Float := 0.0
+  velocityZ : Float := 0.0
+  isGrounded : Bool := false
   deriving Inhabited
 
 namespace GameState
