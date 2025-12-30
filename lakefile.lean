@@ -5,7 +5,8 @@ package cairn where
   version := v!"0.1.0"
   leanOptions := #[
     ⟨`autoImplicit, false⟩,
-    ⟨`relaxedAutoImplicit, false⟩
+    ⟨`relaxedAutoImplicit, false⟩,
+    ⟨`weak.linter.dupNamespace, false⟩
   ]
 
 def commonLinkArgs : Array String := #[

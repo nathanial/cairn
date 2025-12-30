@@ -37,4 +37,19 @@ def _wood : Prism' Block Unit := ctorPrism% Block.wood
 def _leaves : Prism' Block Unit := ctorPrism% Block.leaves
 def _air : Prism' Block Unit := ctorPrism% Block.air
 
+-- Affine lenses for HashMap access
+-- These compose a lens to the HashMap with indexed access
+
+/-- Affine lens for accessing a chunk at a specific position.
+    Composes worldChunks with HashMap's indexed access to focus on
+    at most one Chunk value. -/
+def chunkAt (pos : ChunkPos) : AffineTraversal' World Chunk :=
+  worldChunks ∘ Collimator.Indexed.atLens pos ∘ Collimator.Instances.Option.somePrism' Chunk
+
+/-- Affine lens for accessing a mesh at a specific position.
+    Composes worldMeshes with HashMap's indexed access to focus on
+    at most one ChunkMesh value. -/
+def meshAt (pos : ChunkPos) : AffineTraversal' World ChunkMesh :=
+  worldMeshes ∘ Collimator.Indexed.atLens pos ∘ Collimator.Instances.Option.somePrism' ChunkMesh
+
 end Cairn.Optics

@@ -27,19 +27,19 @@ def empty (config : TerrainConfig := {}) (renderDist : Nat := 3) : World :=
 def getBlock (world : World) (pos : BlockPos) : Block :=
   let chunkPos := pos.toChunkPos
   let localPos := pos.toLocalPos
-  match (world ^. worldChunks)[chunkPos]? with
+  match world ^? chunkAt chunkPos with
   | some chunk => chunk.getBlock localPos
   | none => Block.air
 
 /-- Callback for neighbor block lookup during mesh generation -/
 def getNeighborBlock (world : World) (chunkPos : ChunkPos) (localPos : LocalPos) : Block :=
-  match (world ^. worldChunks)[chunkPos]? with
+  match world ^? chunkAt chunkPos with
   | some chunk => chunk.getBlock localPos
   | none => Block.air
 
 /-- Load or generate a chunk -/
 def ensureChunk (world : World) (pos : ChunkPos) : World :=
-  if (world ^. worldChunks).contains pos then world
+  if (world ^? chunkAt pos).isSome then world
   else
     let config := world ^. worldTerrainConfig
     let chunk := generateChunk config pos
@@ -47,10 +47,10 @@ def ensureChunk (world : World) (pos : ChunkPos) : World :=
 
 /-- Generate mesh for a chunk if dirty -/
 def ensureMesh (world : World) (pos : ChunkPos) : World :=
-  match (world ^. worldChunks)[pos]? with
+  match world ^? chunkAt pos with
   | none => world
   | some chunk =>
-    if !(chunk ^. chunkIsDirty) && (world ^. worldMeshes).contains pos then world
+    if !(chunk ^. chunkIsDirty) && (world ^? meshAt pos).isSome then world
     else
       let mesh := ChunkMesh.generate chunk (getNeighborBlock world)
       let updatedChunk := chunk & chunkIsDirty .~ false
@@ -109,7 +109,7 @@ def unloadDistantChunks (world : World) (centerX centerZ : Int) : World :=
 def setBlock (world : World) (pos : BlockPos) (block : Block) : World :=
   let chunkPos := pos.toChunkPos
   let localPos := pos.toLocalPos
-  match (world ^. worldChunks)[chunkPos]? with
+  match world ^? chunkAt chunkPos with
   | some chunk =>
     let newChunk := chunk.setBlock localPos block
     world & worldChunks %~ (·.insert chunkPos newChunk)
