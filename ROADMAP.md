@@ -6,21 +6,22 @@ This document tracks improvement opportunities, feature proposals, and code clea
 
 ## Feature Proposals
 
-### [Priority: High] Chunk System for Voxel World
+### ~~[Priority: High] Chunk System for Voxel World~~ ✅ COMPLETED
 
-**Description:** Implement a chunk-based world storage system where the world is divided into fixed-size chunks (e.g., 16x16x16 blocks). Each chunk would be loaded, rendered, and managed independently.
+**Status:** Implemented in December 2025.
 
-**Rationale:** The current demo only renders a fixed 5x5 grid of cubes. A real voxel game requires an unbounded world that loads and unloads chunks based on player position. This is the foundational system for all other voxel features.
+**What was built:**
+- `Cairn/Core/Coords.lean` - ChunkPos, LocalPos, BlockPos coordinate types
+- `Cairn/World/Chunk.lean` - 16x16x128 chunk storage with flat Array Block
+- `Cairn/World/ChunkMesh.lean` - Mesh generation with face culling
+- `Cairn/World/Terrain.lean` - Procedural terrain using linalg noise
+- `Cairn/World/World.lean` - Chunk manager with HashMap storage
+- `Main.lean` - Integrated world system with dynamic chunk loading
 
-**Affected Files:**
-- New file: `Cairn/World/Chunk.lean` (chunk data structure, block storage)
-- New file: `Cairn/World/World.lean` (chunk management, coordinate transforms)
-- New file: `Cairn/World/ChunkMesh.lean` (chunk mesh generation)
-- `Main.lean` (integrate world system)
-
-**Estimated Effort:** Large
-
-**Dependencies:** None. Foundation for terrain generation and block placement.
+**Features:**
+- Render distance of 2 chunks (5x5 = 25 chunks loaded)
+- Face culling (only renders faces adjacent to air/transparent)
+- Cross-chunk neighbor lookup for proper boundary meshing
 
 ---
 
@@ -76,20 +77,17 @@ This document tracks improvement opportunities, feature proposals, and code clea
 
 ---
 
-### [Priority: Medium] Procedural Terrain Generation
+### ~~[Priority: Medium] Procedural Terrain Generation~~ ✅ COMPLETED
 
-**Description:** Generate terrain using noise functions (Perlin/Simplex). Include basic biomes, terrain height variation, and ore placement.
+**Status:** Implemented in December 2025 as part of chunk system.
 
-**Rationale:** Hand-placing blocks is tedious. Procedural terrain provides instant playable worlds.
-
-**Affected Files:**
-- New file: `Cairn/World/Terrain.lean` (terrain generator)
-- New file: `Cairn/World/Noise.lean` (noise functions, or use linalg Noise module)
-- `Cairn/World/Chunk.lean` (integrate terrain generation on chunk load)
-
-**Estimated Effort:** Medium
-
-**Dependencies:** Chunk system. Can use `Linalg.Noise` from the linalg dependency.
+**What was built:**
+- `Cairn/World/Terrain.lean` - Terrain generator using linalg noise
+- Uses `fbmSimplex2D` (4 octaves) for heightmap
+- Uses `simplex3D` for cave carving
+- Block layering: grass → dirt → stone with depth
+- Caves carved underground (skip near surface)
+- Configurable via `TerrainConfig` (seed, sea level, height scale, noise scale)
 
 ---
 
@@ -336,19 +334,9 @@ This document tracks improvement opportunities, feature proposals, and code clea
 
 ---
 
-### [Priority: Low] Test Script
+### ~~[Priority: Low] Test Script~~ ✅ COMPLETED
 
-**Issue:** README documents `./build.sh cairn_tests && .lake/build/bin/cairn_tests` but there is no `test.sh` script like other projects in the workspace.
-
-**Location:** Project root
-
-**Action Required:** Add `test.sh` script for consistency with other projects:
-```bash
-#!/bin/bash
-./build.sh cairn_tests && .lake/build/bin/cairn_tests
-```
-
-**Estimated Effort:** Trivial
+**Status:** Added `test.sh` in December 2025.
 
 ---
 
@@ -389,27 +377,27 @@ Currently each cube is drawn with a separate `drawMesh3D` call. For better perfo
 
 These items can be addressed quickly with minimal risk:
 
-1. Add `test.sh` script
+1. ~~Add `test.sh` script~~ ✅
 2. Update README Lean version (4.16.0 -> 4.26.0)
 3. Add doc comments to Camera.lean constants
 4. Implement or remove `coloredCubeAt` stub
 5. Add comprehensive Block enum tests
-6. Add Face enum for future face-specific colors
+6. ~~Add Face enum for future face-specific colors~~ ✅ (added in ChunkMesh.lean)
 
 ---
 
 ## Milestones
 
-### Milestone 1: Basic World (MVP)
-- [ ] Chunk data structure
-- [ ] Basic chunk meshing
-- [ ] Single chunk rendering
+### Milestone 1: Basic World (MVP) ✅ COMPLETED
+- [x] Chunk data structure
+- [x] Basic chunk meshing
+- [x] Single chunk rendering
 - [ ] Extract GameState structure
 
-### Milestone 2: Infinite World
-- [ ] Multiple chunk loading/unloading
-- [ ] Procedural terrain generation
-- [ ] Chunk view distance management
+### Milestone 2: Infinite World ✅ COMPLETED
+- [x] Multiple chunk loading/unloading
+- [x] Procedural terrain generation
+- [x] Chunk view distance management
 
 ### Milestone 3: Interactivity
 - [ ] Block raycasting
@@ -429,4 +417,4 @@ These items can be addressed quickly with minimal risk:
 
 ---
 
-*Last updated: 2025-12-29*
+*Last updated: 2025-12-29 (Chunk system and terrain generation completed)*
