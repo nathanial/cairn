@@ -102,12 +102,7 @@ def unloadDistantChunks (world : World) (centerX centerZ : Int) : World :=
 
 /-- Set block at world position (marks chunk dirty) -/
 def setBlock (world : World) (pos : BlockPos) (block : Block) : World :=
-  let chunkPos := pos.toChunkPos
-  let localPos := pos.toLocalPos
-  (world ^? chunkAt chunkPos).map (fun chunk =>
-    let newChunk := chunk.setBlock localPos block
-    world & worldChunks %~ (·.insert chunkPos newChunk)
-  ) |>.getD world
+  world & chunkAt pos.toChunkPos %~ (·.setBlock pos.toLocalPos block)
 
 end World
 
