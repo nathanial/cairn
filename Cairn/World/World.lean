@@ -1,24 +1,18 @@
 /-
-  Cairn/World/World.lean - World manager for chunk loading and rendering
+  Cairn/World/World.lean - World methods
 -/
 
-import Cairn.Core.Coords
-import Cairn.World.Chunk
-import Cairn.World.ChunkMesh
+import Cairn.World.Types
 import Cairn.World.Terrain
-import Batteries.Lean.HashMap
+import Cairn.Optics
+import Collimator
 
 namespace Cairn.World
 
 open Cairn.Core
-
-/-- World state managing all chunks -/
-structure World where
-  chunks : Std.HashMap ChunkPos Chunk
-  meshes : Std.HashMap ChunkPos ChunkMesh
-  terrainConfig : TerrainConfig
-  renderDistance : Nat  -- Chunks to render in each direction
-  deriving Inhabited
+open Cairn.Optics
+open Collimator
+open scoped Collimator.Operators
 
 namespace World
 
@@ -33,35 +27,36 @@ def empty (config : TerrainConfig := {}) (renderDist : Nat := 3) : World :=
 def getBlock (world : World) (pos : BlockPos) : Block :=
   let chunkPos := pos.toChunkPos
   let localPos := pos.toLocalPos
-  match world.chunks[chunkPos]? with
+  match (world ^. worldChunks)[chunkPos]? with
   | some chunk => chunk.getBlock localPos
   | none => Block.air
 
 /-- Callback for neighbor block lookup during mesh generation -/
 def getNeighborBlock (world : World) (chunkPos : ChunkPos) (localPos : LocalPos) : Block :=
-  match world.chunks[chunkPos]? with
+  match (world ^. worldChunks)[chunkPos]? with
   | some chunk => chunk.getBlock localPos
   | none => Block.air
 
 /-- Load or generate a chunk -/
 def ensureChunk (world : World) (pos : ChunkPos) : World :=
-  if world.chunks.contains pos then world
+  if (world ^. worldChunks).contains pos then world
   else
-    let chunk := generateChunk world.terrainConfig pos
-    { world with chunks := world.chunks.insert pos chunk }
+    let config := world ^. worldTerrainConfig
+    let chunk := generateChunk config pos
+    world & worldChunks %~ (·.insert pos chunk)
 
 /-- Generate mesh for a chunk if dirty -/
 def ensureMesh (world : World) (pos : ChunkPos) : World :=
-  match world.chunks[pos]? with
+  match (world ^. worldChunks)[pos]? with
   | none => world
   | some chunk =>
-    if !chunk.isDirty && world.meshes.contains pos then world
+    if !(chunk ^. chunkIsDirty) && (world ^. worldMeshes).contains pos then world
     else
       let mesh := ChunkMesh.generate chunk (getNeighborBlock world)
-      let updatedChunk := chunk.markClean
-      { world with
-        chunks := world.chunks.insert pos updatedChunk
-        meshes := world.meshes.insert pos mesh }
+      let updatedChunk := chunk & chunkIsDirty .~ false
+      world
+        & worldChunks %~ (·.insert pos updatedChunk)
+        & worldMeshes %~ (·.insert pos mesh)
 
 /-- Get chunk position from world block coordinates -/
 def blockToChunkPos (x z : Int) : ChunkPos :=
@@ -73,10 +68,11 @@ def blockToChunkPos (x z : Int) : ChunkPos :=
 def loadChunksAround (world : World) (centerX centerZ : Int) : World := Id.run do
   let mut w := world
   let center := blockToChunkPos centerX centerZ
-  let rd : Int := world.renderDistance
+  let renderDist := world ^. worldRenderDistance
+  let rd : Int := renderDist
 
-  for dxNat in [:world.renderDistance * 2 + 1] do
-    for dzNat in [:world.renderDistance * 2 + 1] do
+  for dxNat in [:renderDist * 2 + 1] do
+    for dzNat in [:renderDist * 2 + 1] do
       let dx : Int := dxNat - rd
       let dz : Int := dzNat - rd
       let pos : ChunkPos := { x := center.x + dx, z := center.z + dz }
@@ -87,36 +83,37 @@ def loadChunksAround (world : World) (centerX centerZ : Int) : World := Id.run d
 
 /-- Get all meshes for rendering -/
 def getMeshes (world : World) : List (ChunkPos × ChunkMesh) :=
-  world.meshes.toList
+  (world ^. worldMeshes).toList
 
 /-- Get number of loaded chunks -/
 def chunkCount (world : World) : Nat :=
-  world.chunks.size
+  (world ^. worldChunks).size
 
 /-- Get number of cached meshes -/
 def meshCount (world : World) : Nat :=
-  world.meshes.size
+  (world ^. worldMeshes).size
 
 /-- Unload chunks outside render distance -/
 def unloadDistantChunks (world : World) (centerX centerZ : Int) : World :=
   let center := blockToChunkPos centerX centerZ
+  let renderDist := world ^. worldRenderDistance
   let isNear (pos : ChunkPos) : Bool :=
-    (pos.x - center.x).natAbs ≤ world.renderDistance &&
-    (pos.z - center.z).natAbs ≤ world.renderDistance
+    (pos.x - center.x).natAbs <= renderDist &&
+    (pos.z - center.z).natAbs <= renderDist
 
-  let chunks := world.chunks.filter (fun pos _ => isNear pos)
-  let meshes := world.meshes.filter (fun pos _ => isNear pos)
-  { world with chunks := chunks, meshes := meshes }
+  world
+    & worldChunks %~ (·.filter (fun pos _ => isNear pos))
+    & worldMeshes %~ (·.filter (fun pos _ => isNear pos))
 
 /-- Set block at world position (marks chunk dirty) -/
 def setBlock (world : World) (pos : BlockPos) (block : Block) : World :=
   let chunkPos := pos.toChunkPos
   let localPos := pos.toLocalPos
-  match world.chunks[chunkPos]? with
+  match (world ^. worldChunks)[chunkPos]? with
   | some chunk =>
     let newChunk := chunk.setBlock localPos block
-    { world with chunks := world.chunks.insert chunkPos newChunk }
-  | none => world  -- Chunk not loaded, ignore
+    world & worldChunks %~ (·.insert chunkPos newChunk)
+  | none => world
 
 end World
 

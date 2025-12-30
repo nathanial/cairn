@@ -15,3 +15,6 @@ import Cairn.World.World
 -- Utilities
 import Cairn.Camera
 import Cairn.Mesh
+
+-- Optics (profunctor lenses for data access)
+import Cairn.Optics
