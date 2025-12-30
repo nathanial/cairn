@@ -4,21 +4,12 @@
 
 import Cairn.Core.Block
 import Cairn.Core.Coords
+import Cairn.Core.Face
 import Cairn.World.Chunk
 
 namespace Cairn.World
 
 open Cairn.Core
-
-/-- Face direction for culling -/
-inductive Face where
-  | top     -- +Y
-  | bottom  -- -Y
-  | north   -- +Z
-  | south   -- -Z
-  | east    -- +X
-  | west    -- -X
-  deriving Repr, BEq
 
 /-- Chunk mesh data ready for GPU -/
 structure ChunkMesh where
@@ -119,8 +110,6 @@ private def shouldRenderFace (chunk : Chunk) (pos : LocalPos) (face : Face)
   let neighborBlock := getNeighborBlock chunk pos face getExternal
   !neighborBlock.isSolid
 
-/-- All six faces -/
-private def allFaces : Array Face := #[.top, .bottom, .north, .south, .east, .west]
 
 /-- Generate mesh for a chunk with face culling -/
 def generate (chunk : Chunk)
@@ -139,10 +128,9 @@ def generate (chunk : Chunk)
           let worldX := intToFloat (chunk.pos.x * chunkSize + lx)
           let worldY := ly.toFloat
           let worldZ := intToFloat (chunk.pos.z * chunkSize + lz)
-          let color := block.color
-
           -- Check each face
-          for face in allFaces do
+          for face in Face.all do
+            let color := block.faceColor face
             if shouldRenderFace chunk localPos face getExternal then
               let (verts', inds') := addFace vertices indices vertexCount
                                               worldX worldY worldZ face color

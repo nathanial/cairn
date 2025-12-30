@@ -60,20 +60,16 @@ This document tracks improvement opportunities, feature proposals, and code clea
 
 ---
 
-### [Priority: High] Block Face Colors and Textures
+### ~~[Priority: High] Block Face Colors and Textures~~ ✅ COMPLETED
 
-**Description:** Support different colors/textures per block face (e.g., grass has green top, brown sides). Currently `Block.color` returns a single color for all faces.
+**Status:** Implemented in December 2025.
 
-**Rationale:** Makes blocks visually distinct and recognizable. Grass blocks should look like grass, not just green cubes.
-
-**Affected Files:**
-- `Cairn/Core/Block.lean` (add `faceColor : Block -> Face -> Color`)
-- New enum: `Cairn/Core/Face.lean` (Top, Bottom, North, South, East, West)
-- Mesh generation (pass face-specific colors to vertices)
-
-**Estimated Effort:** Small
-
-**Dependencies:** None.
+**What was built:**
+- `Cairn/Core/Face.lean` - Face enum (top, bottom, north, south, east, west)
+- `Block.faceColor` method in Block.lean with per-face colors
+- Grass: green top, dirt bottom, grassy-brown sides
+- Wood: light cut ends, bark sides
+- Other blocks: uniform color (fallback to Block.color)
 
 ---
 
@@ -221,20 +217,14 @@ This document tracks improvement opportunities, feature proposals, and code clea
 
 ---
 
-### [Priority: High] Separate Input Handling Module
+### ~~[Priority: High] Separate Input Handling Module~~ ✅ COMPLETED
 
-**Current State:** Input handling (key codes, mouse input) is hardcoded in `Main.lean` with raw key code constants.
+**Status:** Implemented in December 2025.
 
-**Proposed Change:** Create an input module with named key constants and input state tracking (pressed, released, held).
-
-**Benefits:** Cleaner input code, easier key rebinding, reusable across game states.
-
-**Affected Files:**
-- New file: `Cairn/Input/Keys.lean` (named key constants)
-- New file: `Cairn/Input/State.lean` (input state tracking)
-- `Main.lean` (use input module)
-
-**Estimated Effort:** Small
+**What was built:**
+- `Cairn/Input/Keys.lean` - Named macOS key code constants
+- `Cairn/Input/State.lean` - InputState structure with capture function
+- Refactored `Main.lean` to use InputState.capture for cleaner game loop
 
 ---
 
@@ -413,4 +403,4 @@ These items can be addressed quickly with minimal risk:
 
 ---
 
-*Last updated: 2025-12-30 (Milestone 1 completed with GameState extraction)*
+*Last updated: 2025-12-30 (Block face colors and input handling module completed)*

@@ -39,6 +39,36 @@ test "water block properties" := do
   ensure (!Block.water.isSolid) "water should not be solid"
   ensure Block.water.isTransparent "water should be transparent"
 
+testSuite "Block Face Color Tests"
+
+test "grass has different face colors" := do
+  let topColor := Block.grass.faceColor Face.top
+  let sideColor := Block.grass.faceColor Face.north
+  let bottomColor := Block.grass.faceColor Face.bottom
+  ensure (topColor != sideColor) "grass top should differ from sides"
+  ensure (bottomColor != topColor) "grass bottom should differ from top"
+
+test "wood has different face colors" := do
+  let topColor := Block.wood.faceColor Face.top
+  let sideColor := Block.wood.faceColor Face.east
+  ensure (topColor != sideColor) "wood ends should differ from bark"
+
+test "stone has same color for all faces" := do
+  let topColor := Block.stone.faceColor Face.top
+  let sideColor := Block.stone.faceColor Face.north
+  let bottomColor := Block.stone.faceColor Face.bottom
+  ensure (topColor == sideColor) "stone should be uniform"
+  ensure (topColor == bottomColor) "stone should be uniform"
+
+test "all face colors are valid" := do
+  for block in allBlocks do
+    for face in Face.all do
+      let (r, g, b, a) := block.faceColor face
+      ensure (!r.isNaN) s!"{repr block} {repr face} has NaN red"
+      ensure (!g.isNaN) s!"{repr block} {repr face} has NaN green"
+      ensure (!b.isNaN) s!"{repr block} {repr face} has NaN blue"
+      ensure (!a.isNaN) s!"{repr block} {repr face} has NaN alpha"
+
 testSuite "Block Prism Tests"
 
 test "stone prism matches stone" := do

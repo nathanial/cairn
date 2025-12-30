@@ -9,15 +9,7 @@ open Afferent Afferent.FFI Afferent.Render
 open Linalg
 open Cairn.World
 open Cairn.State
-
-/-- macOS key codes for WASD + Q/E movement -/
-def keyW : UInt16 := 13
-def keyA : UInt16 := 0
-def keyS : UInt16 := 1
-def keyD : UInt16 := 2
-def keyQ : UInt16 := 12  -- Down
-def keyE : UInt16 := 14  -- Up
-def keyEscape : UInt16 := 53
+open Cairn.Input
 
 def main : IO Unit := do
   IO.println "Cairn - Voxel Game"
@@ -68,44 +60,29 @@ def main : IO Unit := do
     let dt := (now - state.lastTime).toFloat / 1000.0
     state := { state with lastTime := now }
 
-    -- Handle pointer lock (for FPS camera)
-    let mut locked ← FFI.Window.getPointerLock canvas.ctx.window
-    let hasKey ← canvas.hasKeyPressed
-    if hasKey then
-      let keyCode ← canvas.getKeyCode
-      if keyCode == keyEscape then
-        FFI.Window.setPointerLock canvas.ctx.window (!locked)
-        locked := !locked
-        canvas.clearKey
+    -- Capture input state
+    let input ← InputState.capture canvas.ctx.window
+
+    -- Handle pointer lock toggle
+    if input.escapePressed then
+      FFI.Window.setPointerLock canvas.ctx.window (!input.pointerLocked)
+      canvas.clearKey
 
     -- Click to capture mouse
-    if !locked then
-      let click ← FFI.Window.getClick canvas.ctx.window
-      match click with
+    if !input.pointerLocked then
+      match input.clickEvent with
       | some ce =>
         FFI.Window.clearClick canvas.ctx.window
         if ce.button == 0 then
           FFI.Window.setPointerLock canvas.ctx.window true
-          locked := true
       | none => pure ()
 
-    -- Check movement keys
-    let wDown ← FFI.Window.isKeyDown canvas.ctx.window keyW
-    let aDown ← FFI.Window.isKeyDown canvas.ctx.window keyA
-    let sDown ← FFI.Window.isKeyDown canvas.ctx.window keyS
-    let dDown ← FFI.Window.isKeyDown canvas.ctx.window keyD
-    let qDown ← FFI.Window.isKeyDown canvas.ctx.window keyQ
-    let eDown ← FFI.Window.isKeyDown canvas.ctx.window keyE
-
-    -- Get mouse delta (only when pointer locked)
-    let (dx, dy) ←
-      if locked then
-        FFI.Window.getMouseDelta canvas.ctx.window
-      else
-        pure (0.0, 0.0)
-
     -- Update camera
-    state := { state with camera := state.camera.update dt wDown sDown aDown dDown eDown qDown dx dy }
+    state := { state with
+      camera := state.camera.update dt
+        input.forward input.back input.left input.right
+        input.up input.down input.mouseDeltaX input.mouseDeltaY
+    }
 
     -- Update world chunks based on camera position
     let playerX := state.camera.x.floor.toInt64.toInt

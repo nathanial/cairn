@@ -3,8 +3,13 @@
 -/
 
 -- Core
+import Cairn.Core.Face
 import Cairn.Core.Block
 import Cairn.Core.Coords
+
+-- Input
+import Cairn.Input.Keys
+import Cairn.Input.State
 
 -- World
 import Cairn.World.Chunk
