@@ -11,6 +11,8 @@ open Cairn.World
 open Cairn.Optics
 open Collimator
 open scoped Collimator.Operators
+open Linalg
+open Afferent.Render
 
 testSuite "Block Tests"
 
@@ -108,6 +110,104 @@ test "Composed lenses work" := do
   let config : TerrainConfig := { seed := 42, seaLevel := 50, baseHeight := 45, heightScale := 25.0, noiseScale := 0.015, caveThreshold := 0.45, caveScale := 0.05 }
   let world := World.empty config 3
   ensure (world ^. (worldTerrainConfig ∘ terrainConfigSeaLevel) == 50) "should read nested seaLevel"
+
+testSuite "Raycast Tests"
+
+-- Helper to insert an empty chunk at a position
+def insertEmptyChunk (world : World) (pos : ChunkPos) : World :=
+  world & worldChunks %~ (·.insert pos (Chunk.empty pos))
+
+test "raycast hits solid block in front" := do
+  -- Create empty world with empty chunk and place a stone block
+  let mut world := World.empty {} 3
+  let targetPos : BlockPos := { x := 5, y := 5, z := 5 }
+  world := insertEmptyChunk world targetPos.toChunkPos
+  world := World.setBlock world targetPos Block.stone
+
+  -- Cast ray from origin toward the block
+  let origin : Vec3 := ⟨0.5, 5.5, 5.5⟩
+  let direction : Vec3 := Vec3.unitX  -- Looking +X
+
+  match raycast world origin direction 100.0 with
+  | some hit =>
+    ensure (hit.blockPos.x == 5) s!"should hit x=5, got {hit.blockPos.x}"
+    ensure (hit.face == Face.west) s!"should hit west face, got {repr hit.face}"
+  | none => ensure false "should have hit a block"
+
+test "raycast misses in empty space" := do
+  let world := World.empty {} 3
+  let origin : Vec3 := ⟨0.0, 5.0, 0.0⟩
+  let direction : Vec3 := Vec3.unitX
+
+  ensure (raycast world origin direction 10.0).isNone "should miss in empty world"
+
+test "raycast respects max distance" := do
+  let mut world := World.empty {} 3
+  let targetPos : BlockPos := { x := 50, y := 5, z := 5 }
+  world := insertEmptyChunk world targetPos.toChunkPos
+  world := World.setBlock world targetPos Block.stone
+
+  let origin : Vec3 := ⟨0.5, 5.5, 5.5⟩
+  let direction : Vec3 := Vec3.unitX
+
+  -- Block at distance ~50, max distance 20 - should miss
+  ensure (raycast world origin direction 20.0).isNone "should miss beyond max distance"
+
+test "raycast detects top face (ray going down)" := do
+  let mut world := World.empty {} 3
+  let targetPos : BlockPos := { x := 5, y := 0, z := 5 }
+  world := insertEmptyChunk world targetPos.toChunkPos
+  world := World.setBlock world targetPos Block.stone
+
+  -- Ray going downward should hit top face
+  let origin : Vec3 := ⟨5.5, 10.0, 5.5⟩
+  let direction : Vec3 := Vec3.down  -- -Y
+
+  match raycast world origin direction 100.0 with
+  | some hit =>
+    ensure (hit.face == Face.top) s!"should hit top face, got {repr hit.face}"
+  | none => ensure false "should have hit a block"
+
+test "raycast detects bottom face (ray going up)" := do
+  let mut world := World.empty {} 3
+  let targetPos : BlockPos := { x := 5, y := 10, z := 5 }
+  world := insertEmptyChunk world targetPos.toChunkPos
+  world := World.setBlock world targetPos Block.stone
+
+  -- Ray going upward should hit bottom face
+  let origin : Vec3 := ⟨5.5, 0.0, 5.5⟩
+  let direction : Vec3 := Vec3.unitY  -- +Y
+
+  match raycast world origin direction 100.0 with
+  | some hit =>
+    ensure (hit.face == Face.bottom) s!"should hit bottom face, got {repr hit.face}"
+  | none => ensure false "should have hit a block"
+
+test "cameraRay returns correct direction at yaw=0 pitch=0" := do
+  let cam : FPSCamera := { x := 10.0, y := 20.0, z := 30.0, yaw := 0.0, pitch := 0.0 }
+  let (origin, dir) := cameraRay cam
+
+  ensure (origin.x == 10.0) s!"origin x should be 10, got {origin.x}"
+  ensure (origin.y == 20.0) s!"origin y should be 20, got {origin.y}"
+  ensure (origin.z == 30.0) s!"origin z should be 30, got {origin.z}"
+  -- With yaw=0, pitch=0, forward should be (0, 0, -1)
+  ensure (dir.x.abs < 0.001) s!"dir.x should be ~0, got {dir.x}"
+  ensure (dir.y.abs < 0.001) s!"dir.y should be ~0, got {dir.y}"
+  ensure ((dir.z + 1.0).abs < 0.001) s!"dir.z should be ~-1, got {dir.z}"
+
+test "adjacentPos returns correct neighbor" := do
+  let hit : RaycastHit := {
+    blockPos := { x := 5, y := 5, z := 5 }
+    face := Face.top
+    point := ⟨5.5, 6.0, 5.5⟩
+    distance := 1.0
+  }
+  let adj := hit.adjacentPos
+  ensure (adj.x == 5 && adj.y == 6 && adj.z == 5) s!"top adjacent should be above, got ({adj.x}, {adj.y}, {adj.z})"
+
+  let hitWest : RaycastHit := { hit with face := Face.west }
+  let adjWest := hitWest.adjacentPos
+  ensure (adjWest.x == 4) s!"west adjacent should have x=4, got {adjWest.x}"
 
 #generate_tests
 

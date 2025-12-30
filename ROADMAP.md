@@ -42,21 +42,33 @@ This document tracks improvement opportunities, feature proposals, and code clea
 
 ---
 
+### ~~[Priority: High] Block Raycasting~~ ✅ COMPLETED
+
+**Status:** Implemented in December 2025.
+
+**What was built:**
+- `Cairn/World/Raycast.lean` - DDA voxel raycast (Amanatides-Woo algorithm)
+- `RaycastHit` structure with blockPos, face, point, distance
+- `cameraForward` / `cameraRay` helpers for FPSCamera
+- `Face.toNormal` and `RaycastHit.adjacentPos` utilities
+- 8 raycast tests covering all face directions
+
+---
+
 ### [Priority: High] Block Placement and Destruction
 
-**Description:** Allow players to place and destroy blocks using mouse input. Implement ray casting to determine which block is being targeted.
+**Description:** Allow players to place and destroy blocks using mouse input.
 
 **Rationale:** Core Minecraft-style gameplay. Without block manipulation, the game is just a viewer.
 
 **Affected Files:**
-- New file: `Cairn/World/Raycast.lean` (block raycasting using linalg Ray/AABB)
 - New file: `Cairn/Input/BlockAction.lean` (place/destroy logic)
-- `Main.lean` (add mouse button handling)
+- `Main.lean` (add mouse button handling, use raycast)
 - `Cairn/World/Chunk.lean` (block modification, dirty flag for remeshing)
 
 **Estimated Effort:** Medium
 
-**Dependencies:** Chunk system, basic world structure.
+**Dependencies:** Block raycasting (completed).
 
 ---
 
@@ -386,7 +398,7 @@ These items can be addressed quickly with minimal risk:
 - [x] Chunk view distance management
 
 ### Milestone 3: Interactivity
-- [ ] Block raycasting
+- [x] Block raycasting
 - [ ] Block placement and destruction
 - [ ] Block selection highlight
 - [ ] Basic hotbar UI
@@ -403,4 +415,4 @@ These items can be addressed quickly with minimal risk:
 
 ---
 
-*Last updated: 2025-12-30 (Block face colors and input handling module completed)*
+*Last updated: 2025-12-30 (Block raycasting completed)*

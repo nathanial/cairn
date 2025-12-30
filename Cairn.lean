@@ -16,6 +16,7 @@ import Cairn.World.Chunk
 import Cairn.World.ChunkMesh
 import Cairn.World.Terrain
 import Cairn.World.World
+import Cairn.World.Raycast
 
 -- Utilities
 import Cairn.Camera
