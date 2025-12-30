@@ -2,9 +2,6 @@
   Cairn/World/Raycast.lean - DDA voxel raycasting (Amanatides-Woo algorithm)
 -/
 
-import Cairn.Core.Coords
-import Cairn.Core.Face
-import Cairn.Core.Block
 import Cairn.World.Types
 import Cairn.World.World
 import Linalg
@@ -15,14 +12,6 @@ namespace Cairn.World
 open Cairn.Core
 open Linalg
 open Afferent.Render
-
-/-- Result of a successful voxel raycast -/
-structure RaycastHit where
-  blockPos : BlockPos    -- Which block was hit
-  face : Face            -- Which face of the block was hit
-  point : Vec3           -- Exact hit point in world space
-  distance : Float       -- Distance from ray origin
-  deriving Repr, BEq
 
 /-- Get normal vector for a face -/
 def Face.toNormal : Face → Vec3

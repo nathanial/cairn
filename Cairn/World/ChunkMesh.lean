@@ -1,16 +1,10 @@
 /-
-  Cairn/World/ChunkMesh.lean - Chunk mesh data structure
+  Cairn/World/ChunkMesh.lean - Chunk mesh methods
 -/
 
-namespace Cairn.World
+import Cairn.World.Types
 
-/-- Chunk mesh data ready for GPU -/
-structure ChunkMesh where
-  vertices : Array Float   -- 10 floats per vertex: x,y,z, nx,ny,nz, r,g,b,a
-  indices : Array UInt32
-  vertexCount : Nat
-  indexCount : Nat
-  deriving Inhabited
+namespace Cairn.World
 
 namespace ChunkMesh
 

@@ -1,23 +1,12 @@
 /-
-  Cairn/World/Chunk.lean - Chunk data structure for voxel storage
+  Cairn/World/Chunk.lean - Chunk methods
 -/
 
-import Cairn.Core.Block
-import Cairn.Core.Coords
+import Cairn.World.Types
 
 namespace Cairn.World
 
 open Cairn.Core
-
-/-- Total blocks in a chunk -/
-def blocksPerChunk : Nat := chunkSize * chunkHeight * chunkSize
-
-/-- A chunk of voxel data -/
-structure Chunk where
-  pos : ChunkPos
-  blocks : Array Block  -- Flat array, size = blocksPerChunk
-  isDirty : Bool        -- Needs mesh rebuild
-  deriving Inhabited
 
 namespace Chunk
 

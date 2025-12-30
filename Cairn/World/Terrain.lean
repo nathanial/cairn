@@ -2,8 +2,7 @@
   Cairn/World/Terrain.lean - Procedural terrain generation using noise
 -/
 
-import Cairn.Core.Block
-import Cairn.Core.Coords
+import Cairn.World.Types
 import Cairn.World.Chunk
 import Cairn.Optics.Chunk
 import Linalg
@@ -14,17 +13,6 @@ open Cairn.Core
 open Cairn.Optics
 open scoped Collimator.Operators
 open Linalg.Noise
-
-/-- Terrain generation configuration -/
-structure TerrainConfig where
-  seed : UInt64 := 12345
-  seaLevel : Nat := 32
-  baseHeight : Nat := 45
-  heightScale : Float := 25.0
-  noiseScale : Float := 0.015  -- Lower = larger features
-  caveThreshold : Float := 0.45
-  caveScale : Float := 0.05
-  deriving Repr, Inhabited
 
 namespace TerrainConfig
 
