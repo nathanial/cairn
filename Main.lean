@@ -39,6 +39,9 @@ def main : IO Unit := do
   -- Create window
   let mut canvas ← Canvas.create physWidth physHeight "Cairn"
 
+  -- Load debug font
+  let debugFont ← Afferent.Font.load "/System/Library/Fonts/Monaco.ttf" (14 * screenScale).toUInt32
+
   -- Initialize game state
   let terrainConfig : TerrainConfig := {
     seed := 42
@@ -87,13 +90,20 @@ def main : IO Unit := do
         input.up input.down input.mouseDeltaX input.mouseDeltaY
     }
 
+    -- Raycast for block targeting (used for both actions and debug display)
+    let raycastHit : Option RaycastHit :=
+      if input.pointerLocked then
+        let (origin, dir) := cameraRay state.camera
+        raycast state.world origin dir 5.0  -- 5 block reach
+      else
+        none
+
     -- Handle block placement/destruction when pointer is locked
     if input.pointerLocked then
       match input.clickEvent with
       | some ce =>
         FFI.Window.clearClick canvas.ctx.window
-        let (origin, dir) := cameraRay state.camera
-        match raycast state.world origin dir 5.0 with  -- 5 block reach
+        match raycastHit with
         | some hit =>
           if ce.button == 0 then
             -- Left click: destroy block
@@ -144,9 +154,33 @@ def main : IO Unit := do
             lightDir
             ambient
 
+      -- Debug text overlay
+      let textColor := Color.white
+      let startY := 50.0
+      let lineHeight := 28.0
+
+      -- Helper to format floats with 1 decimal place
+      let fmt1 (f : Float) : String := s!"{(f * 10).floor / 10}"
+
+      -- Position
+      canvas.ctx.fillTextXY s!"Pos: ({fmt1 state.camera.x}, {fmt1 state.camera.y}, {fmt1 state.camera.z})" 10 startY debugFont textColor
+      -- Look direction
+      canvas.ctx.fillTextXY s!"Look: yaw={fmt1 state.camera.yaw} pitch={fmt1 state.camera.pitch}" 10 (startY + lineHeight) debugFont textColor
+      -- Raycast hit
+      match raycastHit with
+      | some hit =>
+        let block := state.world.getBlock hit.blockPos
+        canvas.ctx.fillTextXY s!"Hit: ({hit.blockPos.x}, {hit.blockPos.y}, {hit.blockPos.z}) {repr hit.face}" 10 (startY + lineHeight * 2) debugFont textColor
+        canvas.ctx.fillTextXY s!"Block: {repr block}" 10 (startY + lineHeight * 3) debugFont textColor
+      | none =>
+        canvas.ctx.fillTextXY "Hit: none" 10 (startY + lineHeight * 2) debugFont textColor
+      -- Chunk info
+      canvas.ctx.fillTextXY s!"Chunks: {state.world.chunks.size}" 10 (startY + lineHeight * 4) debugFont textColor
+
       canvas ← canvas.endFrame
 
   -- Cleanup
   IO.println "Cleaning up..."
+  debugFont.destroy
   canvas.destroy
   IO.println "Done!"
