@@ -25,13 +25,11 @@ def empty (config : TerrainConfig := {}) (renderDist : Nat := 3) : World :=
 
 /-- Get block at world position -/
 def getBlock (world : World) (pos : BlockPos) : Block :=
-  let chunkPos := pos.toChunkPos
-  let localPos := pos.toLocalPos
-  (world ^? chunkAt chunkPos).map (·.getBlock localPos) |>.getD Block.air
+  world ^?? (chunkAt pos.toChunkPos ∘ blockAt pos.toLocalPos) | Block.air
 
 /-- Callback for neighbor block lookup during mesh generation -/
 def getNeighborBlock (world : World) (chunkPos : ChunkPos) (localPos : LocalPos) : Block :=
-  (world ^? chunkAt chunkPos).map (·.getBlock localPos) |>.getD Block.air
+  world ^?? (chunkAt chunkPos ∘ blockAt localPos) | Block.air
 
 /-- Load or generate a chunk -/
 def ensureChunk (world : World) (pos : ChunkPos) : World :=
