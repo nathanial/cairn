@@ -44,9 +44,7 @@ testSuite "Block Face Color Tests"
 test "grass has different face colors" := do
   let topColor := Block.grass.faceColor Face.top
   let sideColor := Block.grass.faceColor Face.north
-  let bottomColor := Block.grass.faceColor Face.bottom
-  ensure (topColor != sideColor) "grass top should differ from sides"
-  ensure (bottomColor != topColor) "grass bottom should differ from top"
+  ensure (topColor != sideColor) "grass top should differ from sides (green vs brown)"
 
 test "wood has different face colors" := do
   let topColor := Block.wood.faceColor Face.top

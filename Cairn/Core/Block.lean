@@ -44,10 +44,9 @@ def Block.color : Block → Float × Float × Float × Float
 
 /-- Get face-specific color for a block (r, g, b, a) -/
 def Block.faceColor : Block → Face → Float × Float × Float × Float
-  -- Grass: green top, dirt bottom, grassy-brown sides
+  -- Grass: green top, dirt/brown sides and bottom (like Minecraft)
   | .grass, .top    => (0.3, 0.7, 0.2, 1.0)
-  | .grass, .bottom => (0.55, 0.35, 0.2, 1.0)
-  | .grass, _       => (0.45, 0.55, 0.25, 1.0)
+  | .grass, _       => (0.55, 0.35, 0.2, 1.0)
   -- Wood: light cut ends, bark sides
   | .wood, .top     => (0.65, 0.5, 0.3, 1.0)
   | .wood, .bottom  => (0.65, 0.5, 0.3, 1.0)
