@@ -18,6 +18,29 @@ def space : UInt16 := 49
 def leftShift : UInt16 := 56
 def leftControl : UInt16 := 59
 
+-- Number keys (for hotbar selection)
+def key1 : UInt16 := 18
+def key2 : UInt16 := 19
+def key3 : UInt16 := 20
+def key4 : UInt16 := 21
+def key5 : UInt16 := 23
+def key6 : UInt16 := 22
+def key7 : UInt16 := 26
+def key8 : UInt16 := 28
+def key9 : UInt16 := 25
+
+/-- Get key code for hotbar index (0-based) -/
+def hotbarKey (index : Nat) : UInt16 :=
+  match index with
+  | 0 => key1
+  | 1 => key2
+  | 2 => key3
+  | 3 => key4
+  | 4 => key5
+  | 5 => key6
+  | 6 => key7
+  | _ => 0  -- Invalid
+
 end Keys
 
 end Cairn.Input

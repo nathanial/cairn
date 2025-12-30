@@ -20,7 +20,8 @@ def main : IO Unit := do
   IO.println "  Q/E  - Move down/up"
   IO.println "  Mouse - Look around (when captured)"
   IO.println "  Left click - Destroy block"
-  IO.println "  Right click - Place stone block"
+  IO.println "  Right click - Place selected block"
+  IO.println "  1-7 - Select block type"
   IO.println "  Escape - Release mouse"
   IO.println ""
 
@@ -74,6 +75,21 @@ def main : IO Unit := do
       FFI.Window.setPointerLock canvas.ctx.window (!input.pointerLocked)
       canvas.clearKey
 
+    -- Hotbar blocks (keys 1-7)
+    let hotbarBlocks : Array Block := #[
+      Block.stone, Block.dirt, Block.grass, Block.sand, Block.wood, Block.leaves, Block.water
+    ]
+
+    -- Handle hotbar number key presses
+    let hasKey ← FFI.Window.hasKeyPressed canvas.ctx.window
+    if hasKey then
+      let keyCode ← FFI.Window.getKeyCode canvas.ctx.window
+      for i in [:hotbarBlocks.size] do
+        if keyCode == Keys.hotbarKey i then
+          if h : i < hotbarBlocks.size then
+            state := { state with selectedBlock := hotbarBlocks[i] }
+          canvas.clearKey
+
     -- Click to capture mouse
     if !input.pointerLocked then
       match input.clickEvent with
@@ -109,11 +125,11 @@ def main : IO Unit := do
             -- Left click: destroy block
             state := { state with world := state.world.setBlock hit.blockPos Block.air }
           else if ce.button == 1 then
-            -- Right click: place stone block
+            -- Right click: place selected block
             let placePos := hit.adjacentPos
             let targetBlock := state.world.getBlock placePos
             if !targetBlock.isSolid then
-              state := { state with world := state.world.setBlock placePos Block.stone }
+              state := { state with world := state.world.setBlock placePos state.selectedBlock }
         | none => pure ()
       | none => pure ()
 
@@ -154,6 +170,29 @@ def main : IO Unit := do
             lightDir
             ambient
 
+      -- Render block selection highlight
+      match raycastHit with
+      | some hit =>
+        -- Helper to convert Int to Float
+        let intToFloat (i : Int) : Float :=
+          if i >= 0 then i.toNat.toFloat else -((-i).toNat.toFloat)
+        -- Position highlight at block center
+        let blockX := intToFloat hit.blockPos.x + 0.5
+        let blockY := intToFloat hit.blockPos.y + 0.5
+        let blockZ := intToFloat hit.blockPos.z + 0.5
+        let highlightModel := Mat4.translation blockX blockY blockZ
+        let highlightMVP := proj * view * highlightModel
+
+        Renderer.drawMesh3D
+          canvas.ctx.renderer
+          Cairn.Mesh.highlightVertices
+          Cairn.Mesh.highlightIndices
+          highlightMVP.toArray
+          highlightModel.toArray
+          lightDir
+          1.0  -- Full ambient for highlight (no shading)
+      | none => pure ()
+
       -- Debug text overlay
       let textColor := Color.white
       let startY := 50.0
@@ -176,6 +215,8 @@ def main : IO Unit := do
         canvas.ctx.fillTextXY "Hit: none" 10 (startY + lineHeight * 2) debugFont textColor
       -- Chunk info
       canvas.ctx.fillTextXY s!"Chunks: {state.world.chunks.size}" 10 (startY + lineHeight * 4) debugFont textColor
+      -- Selected block
+      canvas.ctx.fillTextXY s!"Selected: {repr state.selectedBlock}" 10 (startY + lineHeight * 5) debugFont textColor
 
       canvas ← canvas.endFrame
 

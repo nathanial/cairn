@@ -395,11 +395,11 @@ These items can be addressed quickly with minimal risk:
 - [x] Procedural terrain generation
 - [x] Chunk view distance management
 
-### Milestone 3: Interactivity
+### Milestone 3: Interactivity ✅ COMPLETED
 - [x] Block raycasting
 - [x] Block placement and destruction
-- [ ] Block selection highlight
-- [ ] Basic hotbar UI
+- [x] Block selection highlight
+- [x] Basic hotbar UI (keys 1-7 select block type)
 
 ### Milestone 4: Physics
 - [ ] Player collision with blocks
@@ -413,4 +413,4 @@ These items can be addressed quickly with minimal risk:
 
 ---
 
-*Last updated: 2025-12-30 (Block placement and destruction completed)*
+*Last updated: 2025-12-30 (Milestone 3 complete - block highlight and hotbar added)*

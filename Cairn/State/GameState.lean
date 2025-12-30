@@ -3,6 +3,7 @@
 -/
 
 import Afferent.Render.FPSCamera
+import Cairn.Core.Block
 import Cairn.World.Types
 import Cairn.World.World
 import Cairn.Camera
@@ -10,6 +11,7 @@ import Cairn.Camera
 namespace Cairn.State
 
 open Afferent.Render
+open Cairn.Core
 open Cairn.World
 open Cairn.Camera
 
@@ -18,6 +20,7 @@ structure GameState where
   camera : FPSCamera
   world : World
   lastTime : Nat
+  selectedBlock : Block := Block.stone  -- Currently selected block for placement
   deriving Inhabited
 
 namespace GameState
