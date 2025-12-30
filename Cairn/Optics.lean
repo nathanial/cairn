@@ -55,12 +55,17 @@ def meshAt (pos : ChunkPos) : AffineTraversal' World ChunkMesh :=
 
 /-- Affine traversal for accessing a block at a local position within a chunk.
     Returns none if position is invalid or out of bounds. -/
-def blockAt (pos : LocalPos) : AffineTraversal' Chunk Block :=
+def localBlockAt (pos : LocalPos) : AffineTraversal' Chunk Block :=
   Collimator.Combinators.affineFromPartial
     (fun chunk => if pos.isValid then chunk.blocks[pos.toIndex]? else none)
     (fun chunk block =>
       if pos.isValid && pos.toIndex < chunk.blocks.size then
         { chunk with blocks := chunk.blocks.set! pos.toIndex block }
       else chunk)
+
+/-- Affine traversal for accessing a block at a world position.
+    Composes chunk lookup with local block access. -/
+def blockAt (pos : BlockPos) : AffineTraversal' World Block :=
+  chunkAt pos.toChunkPos ∘ localBlockAt pos.toLocalPos
 
 end Cairn.Optics

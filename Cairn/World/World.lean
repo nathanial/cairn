@@ -25,11 +25,11 @@ def empty (config : TerrainConfig := {}) (renderDist : Nat := 3) : World :=
 
 /-- Get block at world position -/
 def getBlock (world : World) (pos : BlockPos) : Block :=
-  world ^?? (chunkAt pos.toChunkPos ∘ blockAt pos.toLocalPos) | Block.air
+  world ^?? blockAt pos | Block.air
 
 /-- Callback for neighbor block lookup during mesh generation -/
 def getNeighborBlock (world : World) (chunkPos : ChunkPos) (localPos : LocalPos) : Block :=
-  world ^?? (chunkAt chunkPos ∘ blockAt localPos) | Block.air
+  world ^?? (chunkAt chunkPos ∘ localBlockAt localPos) | Block.air
 
 /-- Load or generate a chunk -/
 def ensureChunk (world : World) (pos : ChunkPos) : World :=
@@ -99,7 +99,8 @@ def unloadDistantChunks (world : World) (centerX centerZ : Int) : World :=
 
 /-- Set block at world position (marks chunk dirty) -/
 def setBlock (world : World) (pos : BlockPos) (block : Block) : World :=
-  world & chunkAt pos.toChunkPos %~ (·.setBlock pos.toLocalPos block)
+  world & blockAt pos .~ block
+        & chunkAt pos.toChunkPos ∘ chunkIsDirty .~ true
 
 end World
 
