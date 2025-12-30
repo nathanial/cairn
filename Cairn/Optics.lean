@@ -5,9 +5,9 @@
 import Collimator
 import Collimator.Derive.Lenses
 import Collimator.Combinators
-import Cairn.Core.Coords
 import Cairn.Core.Block
 import Cairn.Optics.Chunk
+import Cairn.Optics.Coords
 import Cairn.World.ChunkMesh
 import Cairn.World.Terrain
 import Cairn.World.Types
@@ -18,11 +18,6 @@ open Collimator
 open Collimator.Derive
 open Cairn.Core
 open Cairn.World
-
--- Auto-generate lenses for coord types
-makeLenses ChunkPos
-makeLenses LocalPos
-makeLenses BlockPos
 
 -- Auto-generate lenses for downstream types
 makeLenses ChunkMesh

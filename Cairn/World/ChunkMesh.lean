@@ -7,6 +7,7 @@ import Cairn.Core.Coords
 import Cairn.Core.Face
 import Cairn.World.Chunk
 import Cairn.Optics.Chunk
+import Cairn.Optics.Coords
 
 namespace Cairn.World
 
@@ -86,26 +87,26 @@ private def getNeighborBlock (chunk : Chunk) (pos : LocalPos) (face : Face)
   match face with
   | .top =>
     if pos.y + 1 >= chunkHeight then Block.air
-    else (chunk ^? localBlockAt { pos with y := pos.y + 1 }).getD Block.air
+    else (chunk ^? localBlockAt (pos & localPosY .~ (pos.y + 1))).getD Block.air
   | .bottom =>
     if pos.y == 0 then Block.air  -- Render bottom of world
-    else (chunk ^? localBlockAt { pos with y := pos.y - 1 }).getD Block.air
+    else (chunk ^? localBlockAt (pos & localPosY .~ (pos.y - 1))).getD Block.air
   | .north =>  -- +Z
     if pos.z + 1 >= chunkSize then
-      getExternal { chunk.pos with z := chunk.pos.z + 1 } { pos with z := 0 }
-    else (chunk ^? localBlockAt { pos with z := pos.z + 1 }).getD Block.air
+      getExternal (chunk.pos & chunkPosZ .~ (chunk.pos.z + 1)) (pos & localPosZ .~ 0)
+    else (chunk ^? localBlockAt (pos & localPosZ .~ (pos.z + 1))).getD Block.air
   | .south =>  -- -Z
     if pos.z == 0 then
-      getExternal { chunk.pos with z := chunk.pos.z - 1 } { pos with z := chunkSize - 1 }
-    else (chunk ^? localBlockAt { pos with z := pos.z - 1 }).getD Block.air
+      getExternal (chunk.pos & chunkPosZ .~ (chunk.pos.z - 1)) (pos & localPosZ .~ (chunkSize - 1))
+    else (chunk ^? localBlockAt (pos & localPosZ .~ (pos.z - 1))).getD Block.air
   | .east =>   -- +X
     if pos.x + 1 >= chunkSize then
-      getExternal { chunk.pos with x := chunk.pos.x + 1 } { pos with x := 0 }
-    else (chunk ^? localBlockAt { pos with x := pos.x + 1 }).getD Block.air
+      getExternal (chunk.pos & chunkPosX .~ (chunk.pos.x + 1)) (pos & localPosX .~ 0)
+    else (chunk ^? localBlockAt (pos & localPosX .~ (pos.x + 1))).getD Block.air
   | .west =>   -- -X
     if pos.x == 0 then
-      getExternal { chunk.pos with x := chunk.pos.x - 1 } { pos with x := chunkSize - 1 }
-    else (chunk ^? localBlockAt { pos with x := pos.x - 1 }).getD Block.air
+      getExternal (chunk.pos & chunkPosX .~ (chunk.pos.x - 1)) (pos & localPosX .~ (chunkSize - 1))
+    else (chunk ^? localBlockAt (pos & localPosX .~ (pos.x - 1))).getD Block.air
 
 /-- Check if a face should be rendered (neighbor is air or transparent) -/
 private def shouldRenderFace (chunk : Chunk) (pos : LocalPos) (face : Face)
