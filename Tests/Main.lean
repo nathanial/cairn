@@ -83,6 +83,47 @@ test "grass prism matches grass" := do
 test "air prism matches air" := do
   ensure (Block.air ^? _air).isSome "should match air"
 
+testSuite "Coordinate Conversion Tests"
+
+test "positive BlockPos to ChunkPos" := do
+  ensure ((BlockPos.mk 0 0 0).toChunkPos == { x := 0, z := 0 }) "origin"
+  ensure ((BlockPos.mk 15 0 15).toChunkPos == { x := 0, z := 0 }) "chunk 0 edge"
+  ensure ((BlockPos.mk 16 0 16).toChunkPos == { x := 1, z := 1 }) "chunk 1 start"
+  ensure ((BlockPos.mk 31 0 31).toChunkPos == { x := 1, z := 1 }) "chunk 1 edge"
+
+test "negative BlockPos to ChunkPos" := do
+  -- Chunk -1 covers blocks [-16, -1]
+  ensure ((BlockPos.mk (-1) 0 0).toChunkPos == { x := -1, z := 0 }) "block -1 → chunk -1"
+  ensure ((BlockPos.mk (-16) 0 0).toChunkPos == { x := -1, z := 0 }) "block -16 → chunk -1"
+  -- Chunk -2 covers blocks [-32, -17]
+  ensure ((BlockPos.mk (-17) 0 0).toChunkPos == { x := -2, z := 0 }) "block -17 → chunk -2"
+  ensure ((BlockPos.mk (-32) 0 0).toChunkPos == { x := -2, z := 0 }) "block -32 → chunk -2"
+  ensure ((BlockPos.mk (-33) 0 0).toChunkPos == { x := -3, z := 0 }) "block -33 → chunk -3"
+
+test "negative BlockPos to LocalPos" := do
+  ensure ((BlockPos.mk (-1) 0 0).toLocalPos == { x := 15, y := 0, z := 0 }) "block -1 → local 15"
+  ensure ((BlockPos.mk (-16) 0 0).toLocalPos == { x := 0, y := 0, z := 0 }) "block -16 → local 0"
+  ensure ((BlockPos.mk (-17) 0 0).toLocalPos == { x := 15, y := 0, z := 0 }) "block -17 → local 15"
+
+test "BlockPos round-trip through WorldPos" := do
+  let testPositions := [
+    BlockPos.mk 0 50 0,
+    BlockPos.mk 15 50 15,
+    BlockPos.mk 16 50 16,
+    BlockPos.mk (-1) 50 (-1),
+    BlockPos.mk (-16) 50 (-16),
+    BlockPos.mk (-17) 50 (-17),
+    BlockPos.mk (-32) 50 (-32)
+  ]
+  for pos in testPositions do
+    let roundTrip := pos.decompose.toBlockPos
+    ensure (roundTrip == pos) s!"round-trip failed for {repr pos}, got {repr roundTrip}"
+
+test "negative Z coordinates" := do
+  ensure ((BlockPos.mk 0 0 (-1)).toChunkPos == { x := 0, z := -1 }) "z=-1 → chunk z=-1"
+  ensure ((BlockPos.mk 0 0 (-16)).toChunkPos == { x := 0, z := -1 }) "z=-16 → chunk z=-1"
+  ensure ((BlockPos.mk 0 0 (-17)).toChunkPos == { x := 0, z := -2 }) "z=-17 → chunk z=-2"
+
 testSuite "Generated Lens Tests"
 
 test "ChunkPos lenses work" := do

@@ -51,9 +51,7 @@ def ensureMesh (world : World) (pos : ChunkPos) : World :=
 
 /-- Get chunk position from world block coordinates -/
 def blockToChunkPos (x z : Int) : ChunkPos :=
-  let floorDiv (a : Int) (b : Nat) : Int :=
-    if a >= 0 then a / b else (a + 1) / b - 1
-  { x := floorDiv x chunkSize, z := floorDiv z chunkSize }
+  { x := x / chunkSize, z := z / chunkSize }
 
 /-- Load chunks around a position within render distance -/
 def loadChunksAround (world : World) (centerX centerZ : Int) : World := Id.run do
@@ -62,12 +60,20 @@ def loadChunksAround (world : World) (centerX centerZ : Int) : World := Id.run d
   let renderDist := world ^. worldRenderDistance
   let rd : Int := renderDist
 
+  -- Pass 1: Load all chunks first (so neighbors exist for mesh generation)
   for dxNat in [:renderDist * 2 + 1] do
     for dzNat in [:renderDist * 2 + 1] do
       let dx : Int := dxNat - rd
       let dz : Int := dzNat - rd
       let pos : ChunkPos := { x := center.x + dx, z := center.z + dz }
       w := w.ensureChunk pos
+
+  -- Pass 2: Generate meshes (all neighbors now loaded)
+  for dxNat in [:renderDist * 2 + 1] do
+    for dzNat in [:renderDist * 2 + 1] do
+      let dx : Int := dxNat - rd
+      let dz : Int := dzNat - rd
+      let pos : ChunkPos := { x := center.x + dx, z := center.z + dz }
       w := w.ensureMesh pos
 
   return w

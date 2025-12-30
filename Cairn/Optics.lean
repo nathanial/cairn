@@ -54,4 +54,9 @@ def meshAt (pos : ChunkPos) : AffineTraversal' World ChunkMesh :=
 def blockAt (pos : BlockPos) : AffineTraversal' World Block :=
   chunkAt pos.toChunkPos ∘ localBlockAt pos.toLocalPos
 
+/-- Affine traversal for accessing a block via WorldPos.
+    Composes chunk lookup with local block access. -/
+def blockAtWorld (pos : WorldPos) : AffineTraversal' World Block :=
+  chunkAt pos.chunk ∘ localBlockAt pos.localPos
+
 end Cairn.Optics

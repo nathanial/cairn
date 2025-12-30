@@ -65,37 +65,25 @@ private def addFace (vertices : Array Float) (indices : Array UInt32)
 
   return (verts, inds)
 
-/-- Compute neighbor position (None = world boundary) -/
-def neighborPos (cp : ChunkPos) (lp : LocalPos) (face : Face) : Option (ChunkPos × LocalPos) :=
+/-- Compute neighbor block position (None = world boundary) -/
+def neighborBlockPos (pos : BlockPos) (face : Face) : Option BlockPos :=
   match face with
-  | .top =>
-    if lp.y + 1 >= chunkHeight then none
-    else some (cp, lp & localPosY %~ (· + 1))
-  | .bottom =>
-    if lp.y == 0 then none
-    else some (cp, lp & localPosY %~ (· - 1))
-  | .north =>
-    if lp.z + 1 >= chunkSize then some (cp & chunkPosZ %~ (· + 1), lp & localPosZ .~ 0)
-    else some (cp, lp & localPosZ %~ (· + 1))
-  | .south =>
-    if lp.z == 0 then some (cp & chunkPosZ %~ (· - 1), lp & localPosZ .~ (chunkSize - 1))
-    else some (cp, lp & localPosZ %~ (· - 1))
-  | .east =>
-    if lp.x + 1 >= chunkSize then some (cp & chunkPosX %~ (· + 1), lp & localPosX .~ 0)
-    else some (cp, lp & localPosX %~ (· + 1))
-  | .west =>
-    if lp.x == 0 then some (cp & chunkPosX %~ (· - 1), lp & localPosX .~ (chunkSize - 1))
-    else some (cp, lp & localPosX %~ (· - 1))
+  | .top    => if pos.y + 1 >= chunkHeight then none else some (pos & blockPosY %~ (· + 1))
+  | .bottom => if pos.y <= 0 then none else some (pos & blockPosY %~ (· - 1))
+  | .north  => some (pos & blockPosZ %~ (· + 1))
+  | .south  => some (pos & blockPosZ %~ (· - 1))
+  | .east   => some (pos & blockPosX %~ (· + 1))
+  | .west   => some (pos & blockPosX %~ (· - 1))
 
 /-- Get neighbor block using world optics -/
-def getNeighborBlock (world : World) (cp : ChunkPos) (lp : LocalPos) (face : Face) : Block :=
-  match neighborPos cp lp face with
-  | some (cp', lp') => (world ^? chunkAt cp' ∘ localBlockAt lp').getD Block.air
+def getNeighborBlock (world : World) (pos : BlockPos) (face : Face) : Block :=
+  match neighborBlockPos pos face with
+  | some pos' => (world ^? blockAt pos').getD Block.air
   | none => Block.air
 
 /-- Check if a face should be rendered (neighbor is air or transparent) -/
-private def shouldRenderFace (world : World) (cp : ChunkPos) (lp : LocalPos) (face : Face) : Bool :=
-  !(getNeighborBlock world cp lp face).isSolid
+private def shouldRenderFace (world : World) (pos : BlockPos) (face : Face) : Bool :=
+  !(getNeighborBlock world pos face).isSolid
 
 /-- Generate mesh for a chunk with face culling -/
 def generateMesh (world : World) (cp : ChunkPos) : ChunkMesh := Id.run do
@@ -103,18 +91,22 @@ def generateMesh (world : World) (cp : ChunkPos) : ChunkMesh := Id.run do
   let mut indices : Array UInt32 := #[]
   let mut vertexCount : Nat := 0
 
+  -- Base world coordinates for this chunk
+  let baseX : Int := cp.x * chunkSize
+  let baseZ : Int := cp.z * chunkSize
+
   for ly in [:chunkHeight] do
     for lz in [:chunkSize] do
       for lx in [:chunkSize] do
-        let lp : LocalPos := { x := lx, y := ly, z := lz }
-        let block := (world ^? chunkAt cp ∘ localBlockAt lp).getD Block.air
+        let pos : BlockPos := { x := baseX + lx, y := ly, z := baseZ + lz }
+        let block := (world ^? blockAt pos).getD Block.air
 
         if block != Block.air && block.isSolid then
-          let worldX := intToFloat (cp.x * chunkSize + lx)
-          let worldY := ly.toFloat
-          let worldZ := intToFloat (cp.z * chunkSize + lz)
+          let worldX := intToFloat pos.x
+          let worldY := intToFloat pos.y
+          let worldZ := intToFloat pos.z
           for face in Face.all do
-            if shouldRenderFace world cp lp face then
+            if shouldRenderFace world pos face then
               let (verts', inds') := addFace vertices indices vertexCount
                                               worldX worldY worldZ face (block.faceColor face)
               vertices := verts'

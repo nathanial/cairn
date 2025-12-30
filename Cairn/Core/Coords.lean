@@ -23,6 +23,12 @@ structure LocalPos where
   z : Nat
   deriving Repr, BEq, Inhabited
 
+/-- World position as chunk + local coordinates -/
+structure WorldPos where
+  chunk : ChunkPos
+  localPos : LocalPos
+  deriving Repr, BEq, Inhabited
+
 /-- World position in block coordinates -/
 structure BlockPos where
   x : Int
@@ -63,10 +69,8 @@ namespace BlockPos
 
 def origin : BlockPos := { x := 0, y := 0, z := 0 }
 
-/-- Floor division that handles negative numbers correctly -/
-private def floorDiv (a : Int) (b : Nat) : Int :=
-  if a >= 0 then a / b
-  else (a + 1) / b - 1
+/-- Floor division - Lean's Int division already floors toward negative infinity -/
+private def floorDiv (a : Int) (b : Nat) : Int := a / b
 
 /-- Modulo that always returns positive result -/
 private def posMod (a : Int) (b : Nat) : Nat :=
@@ -84,16 +88,23 @@ def toLocalPos (pos : BlockPos) : LocalPos :=
   , z := posMod pos.z chunkSize }
 
 /-- Decompose into chunk and local position -/
-def decompose (pos : BlockPos) : ChunkPos × LocalPos :=
-  (pos.toChunkPos, pos.toLocalPos)
+def decompose (pos : BlockPos) : WorldPos :=
+  { chunk := pos.toChunkPos, localPos := pos.toLocalPos }
 
 end BlockPos
 
-/-- Convert chunk + local position to world block position -/
-def toBlockPos (chunk : ChunkPos) (local_ : LocalPos) : BlockPos :=
-  { x := chunk.x * chunkSize + local_.x
-  , y := local_.y
-  , z := chunk.z * chunkSize + local_.z }
+namespace WorldPos
+
+/-- Convert to world block position -/
+def toBlockPos (wp : WorldPos) : BlockPos :=
+  { x := wp.chunk.x * chunkSize + wp.localPos.x
+  , y := wp.localPos.y
+  , z := wp.chunk.z * chunkSize + wp.localPos.z }
+
+/-- Create from block position -/
+def fromBlockPos (pos : BlockPos) : WorldPos := pos.decompose
+
+end WorldPos
 
 /-- Convert flat array index to local position -/
 def indexToLocal (idx : Nat) : LocalPos :=
