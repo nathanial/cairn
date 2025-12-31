@@ -154,10 +154,18 @@ def main : IO Unit := do
         | none => pure ()
       | none => pure ()
 
-    -- Update world chunks based on camera position
+    -- Update world chunks based on camera position (fully async)
     let playerX := state.camera.x.floor.toInt64.toInt
     let playerZ := state.camera.z.floor.toInt64.toInt
-    state := { state with world := state.world.loadChunksAround playerX playerZ }
+    -- Request new chunks (spawns background terrain gen tasks)
+    state.world.requestChunksAround playerX playerZ
+    -- Integrate completed chunks from background tasks
+    let world ← state.world.pollPendingChunks
+    -- Request mesh generation (spawns background mesh gen tasks)
+    world.requestMeshesAround playerX playerZ
+    -- Integrate completed meshes from background tasks
+    let world ← world.pollPendingMeshes
+    state := { state with world }
 
     -- Begin frame with sky blue background
     let ok ← canvas.beginFrame (Color.rgba 0.5 0.7 1.0 1.0)

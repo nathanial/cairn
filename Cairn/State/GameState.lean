@@ -27,16 +27,16 @@ structure GameState where
   velocityZ : Float := 0.0
   isGrounded : Bool := false
   flyMode : Bool := true  -- Start in fly mode (no physics)
-  deriving Inhabited
 
 namespace GameState
 
 /-- Create initial game state with terrain configuration -/
 def create (config : TerrainConfig) (renderDistance : Nat := 2) (startY : Float := 60.0) : IO GameState := do
   let now ← IO.monoMsNow
+  let world ← World.create config renderDistance
   return {
     camera := { defaultCamera with y := startY }
-    world := World.empty config renderDistance
+    world
     lastTime := now
   }
 

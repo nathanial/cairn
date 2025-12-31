@@ -85,6 +85,82 @@ def getNeighborBlock (world : World) (pos : BlockPos) (face : Face) : Block :=
 private def shouldRenderFace (world : World) (pos : BlockPos) (face : Face) : Bool :=
   !(getNeighborBlock world pos face).isSolid
 
+/-- Get block from a chunk by local position -/
+private def getBlockFromChunk (chunk : Chunk) (lx ly lz : Nat) : Block :=
+  let idx := lx + lz * chunkSize + ly * chunkSize * chunkSize
+  chunk.blocks[idx]?.getD Block.air
+
+/-- Get block from chunk neighborhood by world position -/
+private def getBlockFromNeighborhood (hood : ChunkNeighborhood) (pos : BlockPos) : Block :=
+  let cp := hood.center.pos
+  let baseX := cp.x * chunkSize
+  let baseZ := cp.z * chunkSize
+  let relX := pos.x - baseX
+  let relZ := pos.z - baseZ
+
+  -- Check if in center chunk
+  if relX >= 0 && relX < chunkSize && relZ >= 0 && relZ < chunkSize then
+    getBlockFromChunk hood.center relX.toNat pos.y.toNat relZ.toNat
+  -- Check neighbors
+  else if relZ >= chunkSize then  -- North (+Z)
+    match hood.north with
+    | some chunk => getBlockFromChunk chunk relX.toNat pos.y.toNat (relZ - chunkSize).toNat
+    | none => Block.air
+  else if relZ < 0 then  -- South (-Z)
+    match hood.south with
+    | some chunk => getBlockFromChunk chunk relX.toNat pos.y.toNat (relZ + chunkSize).toNat
+    | none => Block.air
+  else if relX >= chunkSize then  -- East (+X)
+    match hood.east with
+    | some chunk => getBlockFromChunk chunk (relX - chunkSize).toNat pos.y.toNat relZ.toNat
+    | none => Block.air
+  else if relX < 0 then  -- West (-X)
+    match hood.west with
+    | some chunk => getBlockFromChunk chunk (relX + chunkSize).toNat pos.y.toNat relZ.toNat
+    | none => Block.air
+  else
+    Block.air
+
+/-- Get neighbor block from neighborhood -/
+private def getNeighborBlockFromHood (hood : ChunkNeighborhood) (pos : BlockPos) (face : Face) : Block :=
+  match neighborBlockPos pos face with
+  | some pos' => getBlockFromNeighborhood hood pos'
+  | none => Block.air
+
+/-- Check if face should render using neighborhood -/
+private def shouldRenderFaceFromHood (hood : ChunkNeighborhood) (pos : BlockPos) (face : Face) : Bool :=
+  !(getNeighborBlockFromHood hood pos face).isSolid
+
+/-- Generate mesh from chunk neighborhood (for background tasks) -/
+def generateMeshFromNeighborhood (hood : ChunkNeighborhood) : ChunkMesh := Id.run do
+  let mut vertices : Array Float := #[]
+  let mut indices : Array UInt32 := #[]
+  let mut vertexCount : Nat := 0
+
+  let cp := hood.center.pos
+  let baseX : Int := cp.x * chunkSize
+  let baseZ : Int := cp.z * chunkSize
+
+  for ly in [:chunkHeight] do
+    for lz in [:chunkSize] do
+      for lx in [:chunkSize] do
+        let pos : BlockPos := { x := baseX + lx, y := ly, z := baseZ + lz }
+        let block := getBlockFromChunk hood.center lx ly lz
+
+        if block != Block.air && block.isSolid then
+          let worldX := intToFloat pos.x
+          let worldY := intToFloat pos.y
+          let worldZ := intToFloat pos.z
+          for face in Face.all do
+            if shouldRenderFaceFromHood hood pos face then
+              let (verts', inds') := addFace vertices indices vertexCount
+                                              worldX worldY worldZ face (block.faceColor face)
+              vertices := verts'
+              indices := inds'
+              vertexCount := vertexCount + 4
+
+  { vertices, indices, vertexCount, indexCount := indices.size }
+
 /-- Generate mesh for a chunk with face culling -/
 def generateMesh (world : World) (cp : ChunkPos) : ChunkMesh := Id.run do
   let mut vertices : Array Float := #[]

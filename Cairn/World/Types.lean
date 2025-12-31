@@ -6,6 +6,7 @@ import Cairn.Core.Block
 import Cairn.Core.Coords
 import Cairn.Core.Face
 import Batteries.Lean.HashMap
+import Std.Data.HashSet
 import Linalg
 
 namespace Cairn.World
@@ -50,12 +51,35 @@ structure RaycastHit where
   distance : Float       -- Distance from ray origin
   deriving Repr, BEq
 
+/-- A chunk that has been generated but not yet integrated into World -/
+structure PendingChunk where
+  pos : ChunkPos
+  chunk : Chunk
+
+/-- A mesh that has been generated but not yet integrated into World -/
+structure PendingMesh where
+  pos : ChunkPos
+  mesh : ChunkMesh
+
+/-- Snapshot of a chunk and its neighbors for background mesh generation -/
+structure ChunkNeighborhood where
+  center : Chunk
+  north : Option Chunk   -- +Z
+  south : Option Chunk   -- -Z
+  east : Option Chunk    -- +X
+  west : Option Chunk    -- -X
+
 /-- World state managing all chunks -/
 structure World where
   chunks : Std.HashMap ChunkPos Chunk
   meshes : Std.HashMap ChunkPos ChunkMesh
   terrainConfig : TerrainConfig
   renderDistance : Nat
-  deriving Inhabited
+  -- Async terrain loading state
+  pendingChunks : IO.Ref (Array PendingChunk)
+  loadingChunks : IO.Ref (Std.HashSet ChunkPos)
+  -- Async mesh generation state
+  pendingMeshes : IO.Ref (Array PendingMesh)
+  meshingChunks : IO.Ref (Std.HashSet ChunkPos)
 
 end Cairn.World

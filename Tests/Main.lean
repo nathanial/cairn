@@ -145,12 +145,12 @@ test "TerrainConfig lenses work" := do
   ensure (newConfig ^. terrainConfigSeed == 12345) "seed should be 12345"
 
 test "World lenses work" := do
-  let world := World.empty {} 5
+  let world ← World.empty {} 5
   ensure (world ^. worldRenderDistance == 5) "render distance should be 5"
 
 test "Composed lenses work" := do
   let config : TerrainConfig := { seed := 42, seaLevel := 50, baseHeight := 45, heightScale := 25.0, noiseScale := 0.015, caveThreshold := 0.45, caveScale := 0.05 }
-  let world := World.empty config 3
+  let world ← World.empty config 3
   ensure (world ^. (worldTerrainConfig ∘ terrainConfigSeaLevel) == 50) "should read nested seaLevel"
 
 testSuite "Raycast Tests"
@@ -161,7 +161,7 @@ def insertEmptyChunk (world : World) (pos : ChunkPos) : World :=
 
 test "raycast hits solid block in front" := do
   -- Create empty world with empty chunk and place a stone block
-  let mut world := World.empty {} 3
+  let mut world ← World.empty {} 3
   let targetPos : BlockPos := { x := 5, y := 5, z := 5 }
   world := insertEmptyChunk world targetPos.toChunkPos
   world := World.setBlock world targetPos Block.stone
@@ -177,14 +177,14 @@ test "raycast hits solid block in front" := do
   | none => ensure false "should have hit a block"
 
 test "raycast misses in empty space" := do
-  let world := World.empty {} 3
+  let world ← World.empty {} 3
   let origin : Vec3 := ⟨0.0, 5.0, 0.0⟩
   let direction : Vec3 := Vec3.unitX
 
   ensure (raycast world origin direction 10.0).isNone "should miss in empty world"
 
 test "raycast respects max distance" := do
-  let mut world := World.empty {} 3
+  let mut world ← World.empty {} 3
   let targetPos : BlockPos := { x := 50, y := 5, z := 5 }
   world := insertEmptyChunk world targetPos.toChunkPos
   world := World.setBlock world targetPos Block.stone
@@ -196,7 +196,7 @@ test "raycast respects max distance" := do
   ensure (raycast world origin direction 20.0).isNone "should miss beyond max distance"
 
 test "raycast detects top face (ray going down)" := do
-  let mut world := World.empty {} 3
+  let mut world ← World.empty {} 3
   let targetPos : BlockPos := { x := 5, y := 0, z := 5 }
   world := insertEmptyChunk world targetPos.toChunkPos
   world := World.setBlock world targetPos Block.stone
@@ -211,7 +211,7 @@ test "raycast detects top face (ray going down)" := do
   | none => ensure false "should have hit a block"
 
 test "raycast detects bottom face (ray going up)" := do
-  let mut world := World.empty {} 3
+  let mut world ← World.empty {} 3
   let targetPos : BlockPos := { x := 5, y := 10, z := 5 }
   world := insertEmptyChunk world targetPos.toChunkPos
   world := World.setBlock world targetPos Block.stone
