@@ -139,7 +139,7 @@ def requestChunk (world : World) (pos : ChunkPos) : IO Unit := do
   let config := world ^. worldTerrainConfig
   let pendingRef := world.pendingChunks
   let loadingRef := world.loadingChunks
-  let _ ← IO.asTask do
+  let _ ← IO.asTask (prio := .dedicated) do
     let chunk := generateChunk config pos
     pendingRef.modify (·.push { pos, chunk })
     loadingRef.modify (·.erase pos)
@@ -216,7 +216,7 @@ def requestMesh (world : World) (pos : ChunkPos) : IO Unit := do
     -- Spawn background task
     let pendingRef := world.pendingMeshes
     let meshingRef := world.meshingChunks
-    let _ ← IO.asTask do
+    let _ ← IO.asTask (prio := .dedicated) do
       let mesh := generateMeshFromNeighborhood hood
       pendingRef.modify (·.push { pos, mesh })
       meshingRef.modify (·.erase pos)
