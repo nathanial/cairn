@@ -251,6 +251,4 @@ test "adjacentPos returns correct neighbor" := do
   let adjWest := hitWest.adjacentPos
   ensure (adjWest.x == 4) s!"west adjacent should have x=4, got {adjWest.x}"
 
-#generate_tests
-
 def main : IO UInt32 := runAllSuites
