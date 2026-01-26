@@ -4,7 +4,6 @@
 import Crucible
 import Cairn
 import Collimator
-import Tests.PhysicsProperties
 
 open Crucible
 open Cairn.Core
@@ -149,7 +148,7 @@ test "World lenses work" := do
   ensure (world ^. worldRenderDistance == 5) "render distance should be 5"
 
 test "Composed lenses work" := do
-  let config : TerrainConfig := { seed := 42, seaLevel := 50, baseHeight := 45, heightScale := 25.0, noiseScale := 0.015, caveThreshold := 0.45, caveScale := 0.05 }
+  let config : TerrainConfig := ⟨42, 50, 45, 25.0, 0.015, 0.45, 0.05⟩
   let world ← World.empty config 3
   ensure (world ^. (worldTerrainConfig ∘ terrainConfigSeaLevel) == 50) "should read nested seaLevel"
 

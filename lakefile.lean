@@ -26,7 +26,6 @@ def commonLinkArgs : Array String := #[
 require afferent from git "https://github.com/nathanial/afferent" @ "v0.0.12"
 require crucible from git "https://github.com/nathanial/crucible" @ "v0.0.9"
 require collimator from git "https://github.com/nathanial/collimator" @ "v0.0.4"
-require plausible from git "https://github.com/leanprover-community/plausible.git" @ "v4.26.0"
 
 @[default_target]
 lean_lib Cairn where
