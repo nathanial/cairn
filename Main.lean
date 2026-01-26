@@ -198,6 +198,9 @@ def main : IO Unit := do
             model.toArray
             lightDir
             ambient
+            #[state.camera.x, state.camera.y, state.camera.z]  -- cameraPos
+            #[0.5, 0.7, 1.0]  -- fogColor (sky blue)
+            0.0 0.0  -- fogStart, fogEnd (0 to disable)
 
       -- Render block selection highlight
       match raycastHit with
@@ -220,6 +223,9 @@ def main : IO Unit := do
           highlightModel.toArray
           lightDir
           1.0  -- Full ambient for highlight (no shading)
+          #[state.camera.x, state.camera.y, state.camera.z]  -- cameraPos
+          #[0.5, 0.7, 1.0]  -- fogColor
+          0.0 0.0  -- fogStart, fogEnd (disabled)
       | none => pure ()
 
       -- Debug text overlay
