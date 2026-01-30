@@ -23,7 +23,7 @@ def commonLinkArgs : Array String := #[
   "-lc++"
 ]
 
-require afferent from git "https://github.com/nathanial/afferent" @ "v0.0.12"
+require afferent from git "https://github.com/nathanial/afferent" @ "v0.0.13"
 require crucible from git "https://github.com/nathanial/crucible" @ "v0.0.9"
 require collimator from git "https://github.com/nathanial/collimator" @ "v0.0.4"
 

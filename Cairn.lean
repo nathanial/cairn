@@ -33,3 +33,6 @@ import Cairn.Physics
 
 -- Optics (profunctor lenses for data access)
 import Cairn.Optics
+
+-- Widget (Canopy widget for embedding voxel scene)
+import Cairn.Widget

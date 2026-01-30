@@ -3,14 +3,18 @@
   Main entry point with game loop, FPS camera, and chunk-based terrain
 -/
 import Afferent
+import Afferent.Widget
 import Cairn
 
 open Afferent Afferent.FFI Afferent.Render
+open Afferent.Arbor (build)
+open Afferent.Widget (renderArborWidgetWithCustom)
 open Linalg
 open Cairn.Core
 open Cairn.World
 open Cairn.State
 open Cairn.Input
+open Cairn.Widget
 
 def main : IO Unit := do
   IO.println "Cairn - Voxel Game"
@@ -173,60 +177,21 @@ def main : IO Unit := do
     if ok then
       -- Get current window size for aspect ratio
       let (currentW, currentH) ← canvas.ctx.getCurrentSize
-      let aspect := currentW / currentH
 
-      -- Setup projection and view matrices
-      let proj := Mat4.perspective Cairn.Camera.fovY aspect Cairn.Camera.nearPlane Cairn.Camera.farPlane
-      let view := state.camera.viewMatrix
+      -- Create VoxelSceneState from GameState for rendering
+      let sceneState : VoxelSceneState := {
+        camera := state.camera
+        world := state.world
+        flyMode := state.flyMode
+      }
 
-      -- Light direction (from upper-right-front, normalized)
-      let lightDir := #[0.5, 0.8, 0.3]
-      let ambient := 0.4
+      -- Get highlight position from raycast
+      let highlightPos := raycastHit.map fun hit =>
+        (hit.blockPos.x, hit.blockPos.y, hit.blockPos.z)
 
-      -- Render all chunk meshes
-      for (_, mesh) in state.world.getMeshes do
-        if mesh.indexCount > 0 then
-          -- Model matrix is identity (world positions already in vertices)
-          let model := Mat4.identity
-          let mvp := proj * view * model
-
-          Renderer.drawMesh3D
-            canvas.ctx.renderer
-            mesh.vertices
-            mesh.indices
-            mvp.toArray
-            model.toArray
-            lightDir
-            ambient
-            #[state.camera.x, state.camera.y, state.camera.z]  -- cameraPos
-            #[0.5, 0.7, 1.0]  -- fogColor (sky blue)
-            0.0 0.0  -- fogStart, fogEnd (0 to disable)
-
-      -- Render block selection highlight
-      match raycastHit with
-      | some hit =>
-        -- Helper to convert Int to Float
-        let intToFloat (i : Int) : Float :=
-          if i >= 0 then i.toNat.toFloat else -((-i).toNat.toFloat)
-        -- Position highlight at block center
-        let blockX := intToFloat hit.blockPos.x + 0.5
-        let blockY := intToFloat hit.blockPos.y + 0.5
-        let blockZ := intToFloat hit.blockPos.z + 0.5
-        let highlightModel := Mat4.translation blockX blockY blockZ
-        let highlightMVP := proj * view * highlightModel
-
-        Renderer.drawMesh3D
-          canvas.ctx.renderer
-          Cairn.Mesh.highlightVertices
-          Cairn.Mesh.highlightIndices
-          highlightMVP.toArray
-          highlightModel.toArray
-          lightDir
-          1.0  -- Full ambient for highlight (no shading)
-          #[state.camera.x, state.camera.y, state.camera.z]  -- cameraPos
-          #[0.5, 0.7, 1.0]  -- fogColor
-          0.0 0.0  -- fogStart, fogEnd (disabled)
-      | none => pure ()
+      -- Build and render voxel scene widget using Arbor pipeline
+      let widget := build (voxelSceneWidgetWithHighlight sceneState {} highlightPos)
+      canvas ← CanvasM.run' canvas (renderArborWidgetWithCustom default widget currentW currentH)
 
       -- Debug text overlay
       let textColor := Color.white
