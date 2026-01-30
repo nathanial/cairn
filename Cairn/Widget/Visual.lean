@@ -91,4 +91,27 @@ def voxelSceneWidgetStyled (state : VoxelSceneState)
     skipCache := true
   }) (style := style)
 
+/-- Create a voxel scene widget that reads state from an IO.Ref.
+    This is designed for use with Canopy where the widget tree is built once
+    but state changes every frame.
+
+    The render function samples the refs each frame to get current state. -/
+def voxelSceneWidgetFromRef
+    (stateRef : IO.Ref VoxelSceneState)
+    (highlightRef : IO.Ref (Option (Int × Int × Int)))
+    (config : VoxelSceneConfig := {}) : WidgetBuilder := do
+  Arbor.custom (spec := {
+    measure := fun _ _ => (0, 0)
+    collect := fun _ => #[]
+    draw := some (fun layout => do
+      -- Sample current state from refs
+      let state ← stateRef.get
+      let highlightPos ← highlightRef.get
+      withContentRect layout fun w h => do
+        let renderer ← getRenderer
+        renderVoxelSceneWithHighlight renderer w h state config highlightPos
+    )
+    skipCache := true
+  }) (style := BoxStyle.fill)
+
 end Cairn.Widget

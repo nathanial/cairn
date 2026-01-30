@@ -4,17 +4,58 @@
 -/
 import Afferent
 import Afferent.Widget
+import Afferent.Canopy
+import Afferent.Canopy.Reactive
+import Reactive
 import Cairn
 
 open Afferent Afferent.FFI Afferent.Render
 open Afferent.Arbor (build)
 open Afferent.Widget (renderArborWidgetWithCustom)
+open Afferent.Canopy.Reactive (ReactiveEvents ReactiveInputs createInputs runWidget ComponentRender)
+open Reactive Reactive.Host
 open Linalg
 open Cairn.Core
 open Cairn.World
 open Cairn.State
 open Cairn.Input
 open Cairn.Widget
+
+/-- Canopy FRP state that persists across frames -/
+structure CanopyState where
+  /-- The Spider environment (keeps FRP network alive) -/
+  spiderEnv : SpiderEnv
+  /-- Reactive event streams for widget subscriptions -/
+  events : ReactiveEvents
+  /-- Trigger functions to fire input events -/
+  inputs : ReactiveInputs
+  /-- Render function that samples all dynamics and returns widget tree -/
+  render : ComponentRender
+
+/-- Initialize Canopy FRP infrastructure for reactive widgets -/
+def initCanopy (fontRegistry : FontRegistry) (sceneStateRef : IO.Ref VoxelSceneState)
+    (highlightRef : IO.Ref (Option (Int × Int × Int))) : IO CanopyState := do
+  -- Create SpiderEnv (keeps FRP network alive)
+  let spiderEnv ← SpiderEnv.new Reactive.Host.defaultErrorHandler
+
+  -- Run FRP setup within SpiderEnv
+  let (events, inputs, render) ← (do
+    -- Create reactive event infrastructure
+    let (events, inputs) ← createInputs fontRegistry Afferent.Canopy.Theme.dark none
+
+    -- Build widget tree using WidgetM (run ReactiveM in SpiderM context)
+    let (_, render) ← Afferent.Canopy.Reactive.ReactiveM.run events do
+      runWidget do
+        -- Emit the voxel scene widget that reads from refs
+        Afferent.Canopy.Reactive.emit (pure (voxelSceneWidgetFromRef sceneStateRef highlightRef {}))
+
+    pure (events, inputs, render)
+  ).run spiderEnv
+
+  -- Fire post-build event to finalize FRP network
+  spiderEnv.postBuildTrigger ()
+
+  pure { spiderEnv, events, inputs, render }
 
 def main : IO Unit := do
   IO.println "Cairn - Voxel Game"
@@ -59,6 +100,14 @@ def main : IO Unit := do
   }
 
   let mut state ← GameState.create terrainConfig
+
+  -- Create refs for widget state (Canopy reads from these each frame)
+  let sceneStateRef ← IO.mkRef (VoxelSceneState.mk state.camera state.world state.flyMode)
+  let highlightRef ← IO.mkRef (none : Option (Int × Int × Int))
+
+  -- Initialize Canopy FRP infrastructure
+  let fontRegistry : FontRegistry := { fonts := #[debugFont] }
+  let canopy ← initCanopy fontRegistry sceneStateRef highlightRef
 
   IO.println s!"Generating initial terrain..."
 
@@ -171,6 +220,13 @@ def main : IO Unit := do
     let world ← world.pollPendingMeshes
     state := { state with world }
 
+    -- Update refs for Canopy widget to read
+    sceneStateRef.set { camera := state.camera, world := state.world, flyMode := state.flyMode }
+    highlightRef.set (raycastHit.map fun hit => (hit.blockPos.x, hit.blockPos.y, hit.blockPos.z))
+
+    -- Fire Canopy animation frame event (propagates FRP network)
+    canopy.inputs.fireAnimationFrame dt
+
     -- Begin frame with sky blue background
     let ok ← canvas.beginFrame (Color.rgba 0.5 0.7 1.0 1.0)
 
@@ -178,20 +234,10 @@ def main : IO Unit := do
       -- Get current window size for aspect ratio
       let (currentW, currentH) ← canvas.ctx.getCurrentSize
 
-      -- Create VoxelSceneState from GameState for rendering
-      let sceneState : VoxelSceneState := {
-        camera := state.camera
-        world := state.world
-        flyMode := state.flyMode
-      }
-
-      -- Get highlight position from raycast
-      let highlightPos := raycastHit.map fun hit =>
-        (hit.blockPos.x, hit.blockPos.y, hit.blockPos.z)
-
-      -- Build and render voxel scene widget using Arbor pipeline
-      let widget := build (voxelSceneWidgetWithHighlight sceneState {} highlightPos)
-      canvas ← CanvasM.run' canvas (renderArborWidgetWithCustom default widget currentW currentH)
+      -- Render Canopy widget tree (samples dynamics, builds widget, renders)
+      let widgetBuilder ← canopy.render
+      let widget := build widgetBuilder
+      canvas ← CanvasM.run' canvas (renderArborWidgetWithCustom fontRegistry widget currentW currentH)
 
       -- Debug text overlay
       let textColor := Color.white
