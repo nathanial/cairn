@@ -36,3 +36,6 @@ import Cairn.Optics
 
 -- Widget (Canopy widget for embedding voxel scene)
 import Cairn.Widget
+
+-- Scene (scene modes and orbit camera)
+import Cairn.Scene
