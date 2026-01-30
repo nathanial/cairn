@@ -1,6 +1,12 @@
 /-
   Cairn - A Minecraft-style voxel game using Afferent
   Main entry point with game loop, FPS camera, and chunk-based terrain
+
+  Uses Reactive FRP for state management:
+  - SceneStates held in a Dynamic, updated via foldDynM
+  - Game loop fires gameFrameTrigger each frame
+  - Tab changes fire tabChangeTrigger
+  - Voxel widget uses dynWidget for reactive rebuilding
 -/
 import Afferent
 import Afferent.Widget
@@ -26,21 +32,6 @@ open Cairn.Input
 open Cairn.Widget
 open Cairn.Scene
 
-/-- State refs for all scene modes -/
-structure SceneRefs where
-  /-- Game world state (full interactive mode) -/
-  gameWorldRef : IO.Ref VoxelSceneState
-  /-- Solid chunk preview state -/
-  solidChunkRef : IO.Ref VoxelSceneState
-  /-- Single block preview state -/
-  singleBlockRef : IO.Ref VoxelSceneState
-  /-- Terrain preview state -/
-  terrainPreviewRef : IO.Ref VoxelSceneState
-  /-- Currently active scene mode -/
-  activeModeRef : IO.Ref SceneMode
-  /-- Block highlight position (game world only) -/
-  highlightRef : IO.Ref (Option (Int × Int × Int))
-
 /-- Canopy FRP state that persists across frames -/
 structure CanopyState where
   /-- The Spider environment (keeps FRP network alive) -/
@@ -53,26 +44,111 @@ structure CanopyState where
   render : ComponentRender
   /-- Tab change trigger function -/
   fireTabChange : Nat → IO Unit
+  /-- Game frame trigger function (fires each frame with input + dt) -/
+  fireGameFrame : GameFrameInput → IO Unit
+  /-- Block select trigger function (fires when hotbar key pressed) -/
+  fireBlockSelect : Block → IO Unit
+  /-- World update trigger (fires after async chunk loading) -/
+  fireWorldUpdate : World → IO Unit
+  /-- Highlight position update trigger -/
+  fireHighlightUpdate : Option (Int × Int × Int) → IO Unit
+  /-- The reactive Dynamic holding all scene states -/
+  sceneStatesDyn : Dynamic Spider SceneStates
+
+/-- Clamp pitch to avoid gimbal lock -/
+private def clampPitch (v : Float) : Float :=
+  if v < -Float.halfPi * 0.99 then -Float.halfPi * 0.99
+  else if v > Float.halfPi * 0.99 then Float.halfPi * 0.99
+  else v
+
+/-- Update camera look direction from mouse input -/
+private def updateCameraLook (camera : FPSCamera) (input : InputState) : FPSCamera :=
+  if input.pointerLocked then
+    let yaw := camera.yaw + input.mouseDeltaX * camera.lookSensitivity
+    let pitch := clampPitch (camera.pitch - input.mouseDeltaY * camera.lookSensitivity)
+    { camera with yaw, pitch }
+  else
+    camera
+
+/-- Apply frame update to the scene states (pure function for accumulation).
+    Returns updated states. World chunk loading is handled separately in IO. -/
+private def applyFrameUpdate (fi : GameFrameInput) (states : SceneStates) : SceneStates :=
+  let input := fi.input
+  let dt := fi.dt
+  match states.activeMode with
+  | .gameWorld =>
+    let camera := updateCameraLook states.gameWorld.camera input
+    if input.pointerLocked then
+      let flyMode := states.gameWorld.flyMode
+      if flyMode then
+        let (newX, newY, newZ) := Cairn.Physics.updatePlayerFly camera.x camera.y camera.z camera.yaw input dt
+        let newCamera := { camera with x := newX, y := newY, z := newZ }
+        { states with gameWorld := { states.gameWorld with camera := newCamera } }
+      else
+        let (newX, newY, newZ, newVx, newVy, newVz, nowGrounded) :=
+          Cairn.Physics.updatePlayer states.gameWorld.world
+            camera.x camera.y camera.z
+            states.velocityX states.velocityY states.velocityZ states.isGrounded
+            camera.yaw input dt
+        let newCamera := { camera with x := newX, y := newY, z := newZ }
+        { states with gameWorld := { states.gameWorld with camera := newCamera }, velocityX := newVx, velocityY := newVy, velocityZ := newVz, isGrounded := nowGrounded }
+    else
+      { states with gameWorld := { states.gameWorld with camera := camera } }
+  | .solidChunk =>
+    let camera := updateCameraLook states.solidChunk.camera input
+    if input.pointerLocked then
+      let (newX, newY, newZ) := Cairn.Physics.updatePlayerFly camera.x camera.y camera.z camera.yaw input dt
+      let newCamera := { camera with x := newX, y := newY, z := newZ }
+      { states with solidChunk := { states.solidChunk with camera := newCamera } }
+    else
+      { states with solidChunk := { states.solidChunk with camera := camera } }
+  | .singleBlock =>
+    let camera := updateCameraLook states.singleBlock.camera input
+    if input.pointerLocked then
+      let (newX, newY, newZ) := Cairn.Physics.updatePlayerFly camera.x camera.y camera.z camera.yaw input dt
+      let newCamera := { camera with x := newX, y := newY, z := newZ }
+      { states with singleBlock := { states.singleBlock with camera := newCamera } }
+    else
+      { states with singleBlock := { states.singleBlock with camera := camera } }
+  | .terrainPreview =>
+    let camera := updateCameraLook states.terrainPreview.camera input
+    if input.pointerLocked then
+      let (newX, newY, newZ) := Cairn.Physics.updatePlayerFly camera.x camera.y camera.z camera.yaw input dt
+      let newCamera := { camera with x := newX, y := newY, z := newZ }
+      { states with terrainPreview := { states.terrainPreview with camera := newCamera } }
+    else
+      { states with terrainPreview := { states.terrainPreview with camera := camera } }
+
+/-- Apply a state update to the SceneStates (used with foldDynM) -/
+private def applyUpdate (update : StateUpdate) (states : SceneStates) : IO SceneStates := do
+  match update with
+  | .frame fi => pure (applyFrameUpdate fi states)
+  | .tabChange idx =>
+    let newMode := SceneMode.fromTabIndex idx
+    -- Clear highlight when switching away from game world
+    let highlightPos := if newMode == .gameWorld then states.highlightPos else none
+    pure { states with activeMode := newMode, highlightPos }
+  | .selectBlock block => pure { states with selectedBlock := block }
+  | .worldUpdate world =>
+    -- Update the game world's World with newly loaded chunks/meshes
+    pure { states with gameWorld := { states.gameWorld with world } }
+  | .highlightUpdate pos => pure { states with highlightPos := pos }
 
 /-- Name for the voxel scene widget (used for click detection) -/
 def voxelSceneWidgetName : String := "voxel-scene"
 
-/-- Create a voxel scene widget that reads from a ref based on active mode.
-    The active mode is checked in the draw callback so it updates each frame. -/
-def voxelSceneWidgetForMode (refs : SceneRefs) (config : VoxelSceneConfig := {}) : Afferent.Arbor.WidgetBuilder := do
+/-- Create a voxel scene widget that samples the SceneStates Dynamic each frame.
+    Uses the active mode to determine which scene state to render. -/
+def voxelSceneWidgetFRP (statesDyn : Dynamic Spider SceneStates) (config : VoxelSceneConfig := {})
+    : Afferent.Arbor.WidgetBuilder := do
   Afferent.Arbor.namedCustom voxelSceneWidgetName (spec := {
     measure := fun _ _ => (0, 0)
     collect := fun _ => #[]
     draw := some (fun layout => do
-      -- Sample current mode and state from refs in draw callback
-      let mode ← refs.activeModeRef.get
-      let stateRef := match mode with
-        | .gameWorld => refs.gameWorldRef
-        | .solidChunk => refs.solidChunkRef
-        | .singleBlock => refs.singleBlockRef
-        | .terrainPreview => refs.terrainPreviewRef
-      let state ← stateRef.get
-      let highlightPos ← refs.highlightRef.get
+      -- Sample current states from the Dynamic in draw callback
+      let states ← statesDyn.sample
+      let currentState := states.getActiveState
+      let highlightPos := states.highlightPos
 
       let rect := layout.contentRect
       Afferent.CanvasM.save
@@ -80,24 +156,41 @@ def voxelSceneWidgetForMode (refs : SceneRefs) (config : VoxelSceneConfig := {})
       Afferent.CanvasM.resetTransform
       Afferent.CanvasM.clip (Rect.mk' 0 0 rect.width rect.height)
       let renderer ← Afferent.CanvasM.getRenderer
-      Cairn.Widget.renderVoxelSceneWithHighlight renderer rect.width rect.height state config highlightPos
+      Cairn.Widget.renderVoxelSceneWithHighlight renderer rect.width rect.height currentState config highlightPos
       Afferent.CanvasM.restore
     )
     skipCache := true
   }) (style := BoxStyle.fill)
 
-/-- Initialize Canopy FRP infrastructure with tab view -/
-def initCanopyWithTabs (fontRegistry : FontRegistry) (refs : SceneRefs) : IO CanopyState := do
+/-- Initialize Canopy FRP infrastructure with tab view and reactive state -/
+def initCanopyWithTabs (fontRegistry : FontRegistry) (initialStates : SceneStates) : IO CanopyState := do
   -- Create SpiderEnv (keeps FRP network alive)
   let spiderEnv ← SpiderEnv.new Reactive.Host.defaultErrorHandler
 
   -- Run FRP setup within SpiderEnv
-  let (events, inputs, render, fireTabChange) ← (do
+  let (events, inputs, render, fireTabChange, fireGameFrame, fireBlockSelect, fireWorldUpdate, fireHighlightUpdate, sceneStatesDyn) ← (do
     -- Create reactive event infrastructure
     let (events, inputs) ← createInputs fontRegistry Afferent.Canopy.Theme.dark none
 
-    -- Create a trigger event for tab changes from outside FRP
+    -- Create trigger events for external inputs
     let (tabChangeTrigger, fireTab) ← Reactive.newTriggerEvent
+    let (gameFrameTrigger, fireFrame) ← Reactive.newTriggerEvent
+    let (blockSelectTrigger, fireBlock) ← Reactive.newTriggerEvent
+    let (worldUpdateTrigger, fireWorld) ← Reactive.newTriggerEvent
+    let (highlightUpdateTrigger, fireHighlight) ← Reactive.newTriggerEvent
+
+    -- Map events to StateUpdate variants
+    let frameUpdates ← Event.mapM StateUpdate.frame gameFrameTrigger
+    let tabUpdates ← Event.mapM StateUpdate.tabChange tabChangeTrigger
+    let blockUpdates ← Event.mapM StateUpdate.selectBlock blockSelectTrigger
+    let worldUpdates ← Event.mapM StateUpdate.worldUpdate worldUpdateTrigger
+    let highlightUpdates ← Event.mapM StateUpdate.highlightUpdate highlightUpdateTrigger
+
+    -- Merge all update sources
+    let allUpdates ← Event.leftmostM [frameUpdates, tabUpdates, blockUpdates, worldUpdates, highlightUpdates]
+
+    -- Build the main state Dynamic using foldDynM
+    let statesDyn ← foldDynM (fun update state => applyUpdate update state) initialStates allUpdates
 
     -- Build widget tree using WidgetM
     let (_, render) ← Afferent.Canopy.Reactive.ReactiveM.run events do
@@ -113,35 +206,27 @@ def initCanopyWithTabs (fontRegistry : FontRegistry) (refs : SceneRefs) : IO Can
         -- Create tab view widget
         let tabResult ← tabView tabs 0
 
-        -- Subscribe to tab changes and update active mode ref
+        -- Subscribe to tab changes and fire to the trigger (which feeds foldDynM)
         let tabAction ← Event.mapM (fun tabIdx => do
-          let mode := SceneMode.fromTabIndex tabIdx
-          refs.activeModeRef.set mode
+          fireTab tabIdx
         ) tabResult.onTabChange
         performEvent_ tabAction
 
-        -- Also handle external tab change triggers (for keyboard shortcuts etc)
-        let externalTabAction ← Event.mapM (fun tabIdx => do
-          let mode := SceneMode.fromTabIndex tabIdx
-          refs.activeModeRef.set mode
-        ) tabChangeTrigger
-        performEvent_ externalTabAction
-
-        -- Emit the voxel scene widget that reads from active mode's ref
-        emit (pure (voxelSceneWidgetForMode refs {}))
+        -- Emit the voxel scene widget that samples the Dynamic
+        emit (pure (voxelSceneWidgetFRP statesDyn {}))
 
 
-    pure (events, inputs, render, fireTab)
+    pure (events, inputs, render, fireTab, fireFrame, fireBlock, fireWorld, fireHighlight, statesDyn)
   ).run spiderEnv
 
   -- Fire post-build event to finalize FRP network
   spiderEnv.postBuildTrigger ()
 
-  pure { spiderEnv, events, inputs, render, fireTabChange }
+  pure { spiderEnv, events, inputs, render, fireTabChange := fireTabChange, fireGameFrame := fireGameFrame, fireBlockSelect := fireBlockSelect, fireWorldUpdate := fireWorldUpdate, fireHighlightUpdate := fireHighlightUpdate, sceneStatesDyn := sceneStatesDyn }
 
 def main : IO Unit := do
-  IO.println "Cairn - Voxel Game"
-  IO.println "=================="
+  IO.println "Cairn - Voxel Game (FRP Edition)"
+  IO.println "================================"
   IO.println "Controls:"
   IO.println "  WASD  - Move horizontally (Game World mode)"
   IO.println "  Space - Jump (Game World mode)"
@@ -183,7 +268,7 @@ def main : IO Unit := do
   }
 
   -- Initialize game state for game world
-  let mut gameState ← GameState.create terrainConfig
+  let gameState ← GameState.create terrainConfig
 
   IO.println "Creating scene worlds..."
 
@@ -214,26 +299,34 @@ def main : IO Unit := do
     moveSpeed := 15.0, lookSensitivity := 0.003
   }
 
-  -- Create refs for each scene mode
-  let gameWorldRef ← IO.mkRef (VoxelSceneState.mk gameState.camera gameState.world gameState.flyMode)
-  let solidChunkRef ← IO.mkRef (VoxelSceneState.mk solidChunkCamera solidChunkWorld true)
-  let singleBlockRef ← IO.mkRef (VoxelSceneState.mk singleBlockCamera singleBlockWorld true)
-  let terrainPreviewRef ← IO.mkRef (VoxelSceneState.mk terrainPreviewCamera terrainPreviewWorld true)
-
-  -- Active mode and highlight refs
-  let activeModeRef ← IO.mkRef SceneMode.gameWorld
-  let highlightRef ← IO.mkRef (none : Option (Int × Int × Int))
-
-  let refs : SceneRefs := {
-    gameWorldRef, solidChunkRef, singleBlockRef, terrainPreviewRef
-    activeModeRef, highlightRef
+  -- Build initial SceneStates (FRP replaces IO.Refs)
+  let initialStates : SceneStates := {
+    gameWorld := { camera := gameState.camera, world := gameState.world, flyMode := gameState.flyMode }
+    solidChunk := { camera := solidChunkCamera, world := solidChunkWorld, flyMode := true }
+    singleBlock := { camera := singleBlockCamera, world := singleBlockWorld, flyMode := true }
+    terrainPreview := { camera := terrainPreviewCamera, world := terrainPreviewWorld, flyMode := true }
+    activeMode := .gameWorld
+    highlightPos := none
+    selectedBlock := gameState.selectedBlock
+    velocityX := 0.0
+    velocityY := 0.0
+    velocityZ := 0.0
+    isGrounded := false
   }
 
   -- Initialize Canopy FRP infrastructure with tabs
   let fontRegistry : FontRegistry := { fonts := #[debugFont] }
-  let canopy ← initCanopyWithTabs fontRegistry refs
+  let canopy ← initCanopyWithTabs fontRegistry initialStates
+
+  -- Track last time for delta calculation
+  let lastTimeRef ← IO.mkRef (← IO.monoMsNow)
 
   IO.println s!"Generating initial terrain..."
+
+  -- Hotbar blocks (keys 1-7)
+  let hotbarBlocks : Array Block := #[
+    Block.stone, Block.dirt, Block.grass, Block.sand, Block.wood, Block.leaves, Block.water
+  ]
 
   -- Main game loop
   while !(← canvas.shouldClose) do
@@ -241,77 +334,47 @@ def main : IO Unit := do
 
     -- Calculate delta time
     let now ← IO.monoMsNow
-    let dt := (now - gameState.lastTime).toFloat / 1000.0
-    gameState := { gameState with lastTime := now }
+    let lastTime ← lastTimeRef.get
+    let dt := (now - lastTime).toFloat / 1000.0
+    lastTimeRef.set now
 
     -- Capture input state
     let input ← InputState.capture canvas.ctx.window
 
-    -- Get current active mode
-    let activeMode ← activeModeRef.get
-
-    -- Handle pointer lock toggle
+    -- Handle pointer lock toggle (escape key)
     if input.escapePressed then
       FFI.Window.setPointerLock canvas.ctx.window (!input.pointerLocked)
       canvas.clearKey
 
-    -- Hotbar blocks (keys 1-7) - only in game mode
-    let hotbarBlocks : Array Block := #[
-      Block.stone, Block.dirt, Block.grass, Block.sand, Block.wood, Block.leaves, Block.water
-    ]
-
-    -- Handle hotbar number key presses
+    -- Handle hotbar number key presses - fire block select event
     let hasKey ← FFI.Window.hasKeyPressed canvas.ctx.window
     if hasKey then
       let keyCode ← FFI.Window.getKeyCode canvas.ctx.window
       for i in [:hotbarBlocks.size] do
         if keyCode == Keys.hotbarKey i then
           if h : i < hotbarBlocks.size then
-            gameState := { gameState with selectedBlock := hotbarBlocks[i] }
+            canopy.fireBlockSelect hotbarBlocks[i]
           canvas.clearKey
 
-    -- Mode-specific updates
-    match activeMode with
-    | .gameWorld =>
-      -- Full game mode: WASD movement, block interaction
-      -- (pointer capture is handled via Canopy click events on the voxel scene widget)
+    -- Fire game frame event with input and dt (this drives all state updates via foldDynM)
+    canopy.fireGameFrame { input, dt }
 
-      -- Update look direction from mouse when pointer locked
-      if input.pointerLocked then
-        let yaw := gameState.camera.yaw + input.mouseDeltaX * gameState.camera.lookSensitivity
-        let pitchClamp (v : Float) : Float :=
-          if v < -Float.halfPi * 0.99 then -Float.halfPi * 0.99
-          else if v > Float.halfPi * 0.99 then Float.halfPi * 0.99
-          else v
-        let pitch := pitchClamp (gameState.camera.pitch - input.mouseDeltaY * gameState.camera.lookSensitivity)
-        gameState := { gameState with camera := { gameState.camera with yaw, pitch } }
+    -- Sample current state to handle IO operations that can't be in pure update
+    let states ← canopy.sceneStatesDyn.sample
 
-        -- Update movement (fly mode or physics)
-        if gameState.flyMode then
-          let (newX, newY, newZ) := Cairn.Physics.updatePlayerFly
-            gameState.camera.x gameState.camera.y gameState.camera.z yaw input dt
-          gameState := { gameState with camera := { gameState.camera with x := newX, y := newY, z := newZ } }
-        else
-          let (newX, newY, newZ, newVx, newVy, newVz, nowGrounded) :=
-            Cairn.Physics.updatePlayer gameState.world
-              gameState.camera.x gameState.camera.y gameState.camera.z
-              gameState.velocityX gameState.velocityY gameState.velocityZ gameState.isGrounded
-              yaw input dt
-          gameState := { gameState with
-            camera := { gameState.camera with x := newX, y := newY, z := newZ }
-            velocityX := newVx
-            velocityY := newVy
-            velocityZ := newVz
-            isGrounded := nowGrounded
-          }
-
-      -- Raycast for block targeting
+    -- Handle game world specific IO operations (async chunk loading, block interaction)
+    if states.activeMode == .gameWorld then
+      -- Raycast for block targeting (needs current world state)
       let raycastHit : Option RaycastHit :=
         if input.pointerLocked then
-          let (origin, dir) := cameraRay gameState.camera
-          raycast gameState.world origin dir 5.0
+          let (origin, dir) := cameraRay states.gameWorld.camera
+          raycast states.gameWorld.world origin dir 5.0
         else
           none
+
+      -- Update highlight position via FRP
+      let highlightPos := raycastHit.map fun hit => (hit.blockPos.x, hit.blockPos.y, hit.blockPos.z)
+      canopy.fireHighlightUpdate highlightPos
 
       -- Handle block placement/destruction when pointer is locked
       if input.pointerLocked then
@@ -320,73 +383,34 @@ def main : IO Unit := do
           FFI.Window.clearClick canvas.ctx.window
           match raycastHit with
           | some hit =>
-            if ce.button == 0 then
-              gameState := { gameState with world := gameState.world.setBlock hit.blockPos Block.air }
+            -- Block modifications - update world and fire to FRP
+            let world := if ce.button == 0 then
+              states.gameWorld.world.setBlock hit.blockPos Block.air
             else if ce.button == 1 then
               let placePos := hit.adjacentPos
-              let targetBlock := gameState.world.getBlock placePos
+              let targetBlock := states.gameWorld.world.getBlock placePos
               if !targetBlock.isSolid then
-                gameState := { gameState with world := gameState.world.setBlock placePos gameState.selectedBlock }
+                states.gameWorld.world.setBlock placePos states.selectedBlock
+              else
+                states.gameWorld.world
+            else
+              states.gameWorld.world
+            canopy.fireWorldUpdate world
           | none => pure ()
         | none => pure ()
 
       -- Update world chunks based on camera position (fully async)
-      let playerX := gameState.camera.x.floor.toInt64.toInt
-      let playerZ := gameState.camera.z.floor.toInt64.toInt
-      gameState.world.requestChunksAround playerX playerZ
-      let world ← gameState.world.pollPendingChunks
+      let playerX := states.gameWorld.camera.x.floor.toInt64.toInt
+      let playerZ := states.gameWorld.camera.z.floor.toInt64.toInt
+      states.gameWorld.world.requestChunksAround playerX playerZ
+      let world ← states.gameWorld.world.pollPendingChunks
       world.requestMeshesAround playerX playerZ
       let world ← world.pollPendingMeshes
-      gameState := { gameState with world }
-
-      -- Update refs for widget
-      gameWorldRef.set { camera := gameState.camera, world := gameState.world, flyMode := gameState.flyMode }
-      highlightRef.set (raycastHit.map fun hit => (hit.blockPos.x, hit.blockPos.y, hit.blockPos.z))
-
-    | .solidChunk =>
-      -- FPS camera mode: WASD movement, mouse look, no block interaction
-      highlightRef.set none
-      if input.pointerLocked then
-        let state ← solidChunkRef.get
-        let camera := state.camera
-        -- Update look direction
-        let yaw := camera.yaw + input.mouseDeltaX * camera.lookSensitivity
-        let pitchClamp (v : Float) : Float :=
-          if v < -Float.halfPi * 0.99 then -Float.halfPi * 0.99
-          else if v > Float.halfPi * 0.99 then Float.halfPi * 0.99
-          else v
-        let pitch := pitchClamp (camera.pitch - input.mouseDeltaY * camera.lookSensitivity)
-        -- Use same fly movement as game mode
-        let (newX, newY, newZ) := Cairn.Physics.updatePlayerFly camera.x camera.y camera.z yaw input dt
-        solidChunkRef.set { state with camera := { camera with x := newX, y := newY, z := newZ, yaw, pitch } }
-
-    | .singleBlock =>
-      highlightRef.set none
-      if input.pointerLocked then
-        let state ← singleBlockRef.get
-        let camera := state.camera
-        let yaw := camera.yaw + input.mouseDeltaX * camera.lookSensitivity
-        let pitchClamp (v : Float) : Float :=
-          if v < -Float.halfPi * 0.99 then -Float.halfPi * 0.99
-          else if v > Float.halfPi * 0.99 then Float.halfPi * 0.99
-          else v
-        let pitch := pitchClamp (camera.pitch - input.mouseDeltaY * camera.lookSensitivity)
-        let (newX, newY, newZ) := Cairn.Physics.updatePlayerFly camera.x camera.y camera.z yaw input dt
-        singleBlockRef.set { state with camera := { camera with x := newX, y := newY, z := newZ, yaw, pitch } }
-
-    | .terrainPreview =>
-      highlightRef.set none
-      if input.pointerLocked then
-        let state ← terrainPreviewRef.get
-        let camera := state.camera
-        let yaw := camera.yaw + input.mouseDeltaX * camera.lookSensitivity
-        let pitchClamp (v : Float) : Float :=
-          if v < -Float.halfPi * 0.99 then -Float.halfPi * 0.99
-          else if v > Float.halfPi * 0.99 then Float.halfPi * 0.99
-          else v
-        let pitch := pitchClamp (camera.pitch - input.mouseDeltaY * camera.lookSensitivity)
-        let (newX, newY, newZ) := Cairn.Physics.updatePlayerFly camera.x camera.y camera.z yaw input dt
-        terrainPreviewRef.set { state with camera := { camera with x := newX, y := newY, z := newZ, yaw, pitch } }
+      -- Fire the updated world to the FRP network
+      canopy.fireWorldUpdate world
+    else
+      -- Clear highlight when not in game world mode
+      canopy.fireHighlightUpdate none
 
     -- Begin frame with sky blue background
     let ok ← canvas.beginFrame (Color.rgba 0.5 0.7 1.0 1.0)
@@ -445,27 +469,22 @@ def main : IO Unit := do
       canvas ← CanvasM.run' canvas (Afferent.Widget.executeCommandsBatched fontRegistry renderCommands)
       canvas ← CanvasM.run' canvas (Afferent.Widget.renderCustomWidgets measuredWidget layouts)
 
-      -- Debug text overlay
+      -- Debug text overlay (sample state again after FRP propagation)
+      let states ← canopy.sceneStatesDyn.sample
       let textColor := Color.white
-      let startY := 50.0
       let lineHeight := 28.0
+      -- Position at bottom left (7 lines max, plus margin)
+      let startY := currentH - (7 * lineHeight) - 20.0
 
       -- Helper to format floats with 1 decimal place
       let fmt1 (f : Float) : String := s!"{(f * 10).floor / 10}"
 
       -- Get current camera for display based on mode
-      let (displayCamera, displayMode) ← do
-        match activeMode with
-        | .gameWorld => pure (gameState.camera, "Game World")
-        | .solidChunk =>
-          let state ← solidChunkRef.get
-          pure (state.camera, "Solid Chunk")
-        | .singleBlock =>
-          let state ← singleBlockRef.get
-          pure (state.camera, "Single Block")
-        | .terrainPreview =>
-          let state ← terrainPreviewRef.get
-          pure (state.camera, "Terrain Preview")
+      let (displayCamera, displayMode) := match states.activeMode with
+        | .gameWorld => (states.gameWorld.camera, "Game World")
+        | .solidChunk => (states.solidChunk.camera, "Solid Chunk")
+        | .singleBlock => (states.singleBlock.camera, "Single Block")
+        | .terrainPreview => (states.terrainPreview.camera, "Terrain Preview")
 
       -- Mode indicator
       canvas.ctx.fillTextXY s!"Mode: {displayMode}" 10 startY debugFont textColor
@@ -475,21 +494,21 @@ def main : IO Unit := do
       canvas.ctx.fillTextXY s!"Look: yaw={fmt1 displayCamera.yaw} pitch={fmt1 displayCamera.pitch}" 10 (startY + lineHeight * 2) debugFont textColor
 
       -- Game-world specific info
-      if activeMode == .gameWorld then
+      if states.activeMode == .gameWorld then
         let raycastHit : Option RaycastHit :=
           if input.pointerLocked then
-            let (origin, dir) := cameraRay gameState.camera
-            raycast gameState.world origin dir 5.0
+            let (origin, dir) := cameraRay states.gameWorld.camera
+            raycast states.gameWorld.world origin dir 5.0
           else none
         match raycastHit with
         | some hit =>
-          let block := gameState.world.getBlock hit.blockPos
+          let block := states.gameWorld.world.getBlock hit.blockPos
           canvas.ctx.fillTextXY s!"Hit: ({hit.blockPos.x}, {hit.blockPos.y}, {hit.blockPos.z}) {repr hit.face}" 10 (startY + lineHeight * 3) debugFont textColor
           canvas.ctx.fillTextXY s!"Block: {repr block}" 10 (startY + lineHeight * 4) debugFont textColor
         | none =>
           canvas.ctx.fillTextXY "Hit: none" 10 (startY + lineHeight * 3) debugFont textColor
-        canvas.ctx.fillTextXY s!"Chunks: {gameState.world.chunks.size}" 10 (startY + lineHeight * 5) debugFont textColor
-        canvas.ctx.fillTextXY s!"Selected: {repr gameState.selectedBlock}" 10 (startY + lineHeight * 6) debugFont textColor
+        canvas.ctx.fillTextXY s!"Chunks: {states.gameWorld.world.chunks.size}" 10 (startY + lineHeight * 5) debugFont textColor
+        canvas.ctx.fillTextXY s!"Selected: {repr states.selectedBlock}" 10 (startY + lineHeight * 6) debugFont textColor
 
       canvas ← canvas.endFrame
 
