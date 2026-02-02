@@ -190,6 +190,25 @@ test "raycast misses in empty space" := do
 
   ensure (raycast world origin direction 10.0).isNone "should miss in empty world"
 
+test "raycast returns none for zero direction" := do
+  let world ← World.empty {} 3
+  let origin : Vec3 := ⟨0.0, 0.0, 0.0⟩
+  let direction : Vec3 := ⟨0.0, 0.0, 0.0⟩
+  ensure (raycast world origin direction 10.0).isNone "zero direction should miss"
+
+test "raycast detects starting inside block" := do
+  let mut world ← World.empty {} 3
+  let targetPos : BlockPos := { x := 1, y := 1, z := 1 }
+  world := insertEmptyChunk world targetPos.toChunkPos
+  world := World.setBlock world targetPos Block.stone
+  let origin : Vec3 := ⟨1.2, 1.2, 1.2⟩
+  let direction : Vec3 := Vec3.unitX
+  match raycast world origin direction 10.0 with
+  | some hit =>
+    ensure (hit.blockPos == targetPos) "should hit starting block"
+    ensure (hit.distance == 0.0) "distance should be 0 when inside"
+  | none => ensure false "should hit block when starting inside"
+
 test "raycast respects max distance" := do
   let mut world ← World.empty {} 3
   let targetPos : BlockPos := { x := 50, y := 5, z := 5 }
@@ -201,6 +220,17 @@ test "raycast respects max distance" := do
 
   -- Block at distance ~50, max distance 20 - should miss
   ensure (raycast world origin direction 20.0).isNone "should miss beyond max distance"
+
+test "raycast hits diagonal target" := do
+  let mut world ← World.empty {} 3
+  let targetPos : BlockPos := { x := 1, y := 1, z := 1 }
+  world := insertEmptyChunk world targetPos.toChunkPos
+  world := World.setBlock world targetPos Block.stone
+  let origin : Vec3 := ⟨0.1, 0.1, 0.1⟩
+  let direction : Vec3 := ⟨1.0, 1.0, 1.0⟩
+  match raycast world origin direction 10.0 with
+  | some hit => ensure (hit.blockPos == targetPos) "should hit diagonal block"
+  | none => ensure false "should hit diagonal block"
 
 test "raycast detects top face (ray going down)" := do
   let mut world ← World.empty {} 3

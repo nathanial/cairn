@@ -40,9 +40,6 @@ private def epsilon : Float := 1e-8
 /-- Large value representing infinity for axis-aligned rays -/
 private def infinity : Float := 1e30
 
-/-- Maximum number of iterations to prevent infinite loops -/
-private def maxIterations : Nat := 1000
-
 /-- Convert Int to Float -/
 private def intToFloat (i : Int) : Float :=
   if i >= 0 then i.toNat.toFloat
@@ -52,17 +49,42 @@ private def intToFloat (i : Int) : Float :=
 private def floorToInt (f : Float) : Int :=
   f.floor.toInt64.toInt
 
+/-- Check if a direction vector is effectively zero. -/
+private def isZeroDir (dir : Vec3) : Bool :=
+  dir.x.abs < epsilon && dir.y.abs < epsilon && dir.z.abs < epsilon
+
 /-- DDA voxel raycast through the world.
     Returns the first solid block hit along the ray, or none if no hit within maxDistance. -/
 def raycast (world : World) (origin : Vec3) (direction : Vec3) (maxDistance : Float)
     : Option RaycastHit := Id.run do
-  -- Normalize direction
-  let dir := direction.normalize
-
   -- Current voxel position (floor of origin)
   let mut voxelX : Int := floorToInt origin.x
   let mut voxelY : Int := floorToInt origin.y
   let mut voxelZ : Int := floorToInt origin.z
+
+  -- Track which face was crossed last (for hit detection)
+  -- Start with top since we typically look down at terrain
+  let mut lastFace : Face := .top
+  let mut t : Float := 0.0
+
+  -- Check if we start inside a solid block
+  let startBlock := World.getBlock world { x := voxelX, y := voxelY, z := voxelZ }
+  if startBlock.isSolid then
+    return some {
+      blockPos := { x := voxelX, y := voxelY, z := voxelZ }
+      face := .top  -- Arbitrary face when inside
+      point := origin
+      distance := 0.0
+    }
+
+  if maxDistance <= 0.0 then
+    return none
+
+  if isZeroDir direction then
+    return none
+
+  -- Normalize direction
+  let dir := direction.normalize
 
   -- Step direction: +1 or -1 for each axis
   let stepX : Int := if dir.x >= 0.0 then 1 else -1
@@ -93,20 +115,9 @@ def raycast (world : World) (origin : Vec3) (direction : Vec3) (maxDistance : Fl
     else
       (origin.z - intToFloat voxelZ) * tDeltaZ
 
-  -- Track which face was crossed last (for hit detection)
-  -- Start with top since we typically look down at terrain
-  let mut lastFace : Face := .top
-  let mut t : Float := 0.0
-
-  -- Check if we start inside a solid block
-  let startBlock := World.getBlock world { x := voxelX, y := voxelY, z := voxelZ }
-  if startBlock.isSolid then
-    return some {
-      blockPos := { x := voxelX, y := voxelY, z := voxelZ }
-      face := .top  -- Arbitrary face when inside
-      point := origin
-      distance := 0.0
-    }
+  -- Derive iteration cap from maxDistance (one voxel per unit in worst case)
+  let maxIterations : Nat :=
+    (Float.ceil maxDistance).toUInt64.toNat + 2
 
   -- DDA loop
   for _ in [:maxIterations] do
