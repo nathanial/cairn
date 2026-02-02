@@ -43,13 +43,46 @@ def empty (config : TerrainConfig := {}) (renderDist : Nat := 3) : IO World :=
 def getBlock (world : World) (pos : BlockPos) : Block :=
   world ^?? blockAt pos | Block.air
 
+/-- Mark a chunk dirty if it exists in the world. -/
+private def markChunkDirty (world : World) (pos : ChunkPos) : World :=
+  world & chunkAt pos ∘ chunkIsDirty .~ true
+
+/-- Cardinal neighbors of a chunk (N/S/E/W). -/
+private def neighborChunkPositions (pos : ChunkPos) : Array ChunkPos :=
+  #[
+    { x := pos.x + 1, z := pos.z }
+  , { x := pos.x - 1, z := pos.z }
+  , { x := pos.x, z := pos.z + 1 }
+  , { x := pos.x, z := pos.z - 1 }
+  ]
+
+/-- Mark neighbor chunks dirty to refresh meshes when boundaries change. -/
+private def markNeighborChunksDirty (world : World) (pos : ChunkPos) : World :=
+  (neighborChunkPositions pos).foldl markChunkDirty world
+
+/-- Neighbor chunks affected by a block edit at the given position. -/
+private def neighborChunksForBlock (pos : BlockPos) : Array ChunkPos := Id.run do
+  let localPos := pos.toLocalPos
+  let base := pos.toChunkPos
+  let mut neighbors : Array ChunkPos := #[]
+  if localPos.x == 0 then
+    neighbors := neighbors.push { x := base.x - 1, z := base.z }
+  if localPos.x == chunkSize - 1 then
+    neighbors := neighbors.push { x := base.x + 1, z := base.z }
+  if localPos.z == 0 then
+    neighbors := neighbors.push { x := base.x, z := base.z - 1 }
+  if localPos.z == chunkSize - 1 then
+    neighbors := neighbors.push { x := base.x, z := base.z + 1 }
+  return neighbors
+
 /-- Load or generate a chunk -/
 def ensureChunk (world : World) (pos : ChunkPos) : World :=
   if (world ^? chunkAt pos).isSome then world
   else
     let config := world ^. worldTerrainConfig
     let chunk := generateChunk config pos
-    world & worldChunks %~ (·.insert pos chunk)
+    let world := world & worldChunks %~ (·.insert pos chunk)
+    markNeighborChunksDirty world pos
 
 /-- Generate mesh for a chunk if dirty -/
 def ensureMesh (world : World) (pos : ChunkPos) : World :=
@@ -118,8 +151,9 @@ def unloadDistantChunks (world : World) (centerX centerZ : Int) : World :=
 
 /-- Set block at world position (marks chunk dirty) -/
 def setBlock (world : World) (pos : BlockPos) (block : Block) : World :=
-  world & blockAt pos .~ block
-        & chunkAt pos.toChunkPos ∘ chunkIsDirty .~ true
+  let world := world & blockAt pos .~ block
+                    & chunkAt pos.toChunkPos ∘ chunkIsDirty .~ true
+  (neighborChunksForBlock pos).foldl markChunkDirty world
 
 /-! ## Async Chunk Loading -/
 
@@ -150,6 +184,7 @@ def pollPendingChunks (world : World) : IO World := do
   let mut w := world
   for p in pending do
     w := w & worldChunks %~ (·.insert p.pos p.chunk)
+    w := markNeighborChunksDirty w p.pos
   return w
 
 /-- Request chunks around position (non-blocking) -/
