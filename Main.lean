@@ -15,6 +15,7 @@ import Afferent.Canopy.Reactive
 import Afferent.Canopy.Widget.Layout.TabView
 import Reactive
 import Cairn
+import Cairn.World.Async
 
 open Afferent Afferent.FFI Afferent.Render
 open Afferent.Arbor (build BoxStyle)
@@ -52,6 +53,8 @@ structure CanopyState where
   fireWorldUpdate : World → IO Unit
   /-- Highlight position update trigger -/
   fireHighlightUpdate : Option (Int × Int × Int) → IO Unit
+  /-- World loading worker pool handle -/
+  worldLoader : WorldLoader
   /-- The reactive Dynamic holding all scene states -/
   sceneStatesDyn : Dynamic Spider SceneStates
 
@@ -71,7 +74,7 @@ private def updateCameraLook (camera : FPSCamera) (input : InputState) : FPSCame
     camera
 
 /-- Apply frame update to the scene states (pure function for accumulation).
-    Returns updated states. World chunk loading is handled separately in IO. -/
+    Returns updated states. World loading is handled via FRP worker pool. -/
 private def applyFrameUpdate (fi : GameFrameInput) (states : SceneStates) : SceneStates :=
   let input := fi.input
   let dt := fi.dt
@@ -131,6 +134,12 @@ private def applyUpdate (update : StateUpdate) (states : SceneStates) : IO Scene
   | .selectBlock block => pure { states with selectedBlock := block }
   | .worldUpdate world =>
     -- Update the game world's World with newly loaded chunks/meshes
+    pure { states with gameWorld := { states.gameWorld with world } }
+  | .worldChunkReady pending =>
+    let world := World.integratePendingChunk states.gameWorld.world pending
+    pure { states with gameWorld := { states.gameWorld with world } }
+  | .worldMeshReady pending =>
+    let world := World.integratePendingMesh states.gameWorld.world pending
     pure { states with gameWorld := { states.gameWorld with world } }
   | .highlightUpdate pos => pure { states with highlightPos := pos }
 
@@ -221,7 +230,7 @@ def initCanopyWithTabs (fontRegistry : FontRegistry) (initialStates : SceneState
   let spiderEnv ← SpiderEnv.new Reactive.Host.defaultErrorHandler
 
   -- Run FRP setup within SpiderEnv
-  let (events, inputs, render, fireTabChange, fireGameFrame, fireBlockSelect, fireWorldUpdate, fireHighlightUpdate, sceneStatesDyn) ← (do
+  let (events, inputs, render, fireTabChange, fireGameFrame, fireBlockSelect, fireWorldUpdate, fireHighlightUpdate, sceneStatesDyn, worldLoader) ← (do
     -- Create reactive event infrastructure
     let (events, inputs) ← createInputs fontRegistry Afferent.Canopy.Theme.dark none
 
@@ -230,17 +239,49 @@ def initCanopyWithTabs (fontRegistry : FontRegistry) (initialStates : SceneState
     let (gameFrameTrigger, fireFrame) ← Reactive.newTriggerEvent
     let (blockSelectTrigger, fireBlock) ← Reactive.newTriggerEvent
     let (worldUpdateTrigger, fireWorld) ← Reactive.newTriggerEvent
+    let (worldChunkReadyTrigger, fireWorldChunkReady) ← Reactive.newTriggerEvent
+    let (worldMeshReadyTrigger, fireWorldMeshReady) ← Reactive.newTriggerEvent
     let (highlightUpdateTrigger, fireHighlight) ← Reactive.newTriggerEvent
+    let (worldCommandEvt, fireWorldCommand) ← Reactive.newTriggerEvent
+      (t := Spider) (a := PoolCommand WorldJobId WorldJob)
 
     -- Map events to StateUpdate variants
     let frameUpdates ← Event.mapM StateUpdate.frame gameFrameTrigger
     let tabUpdates ← Event.mapM StateUpdate.tabChange tabChangeTrigger
     let blockUpdates ← Event.mapM StateUpdate.selectBlock blockSelectTrigger
     let worldUpdates ← Event.mapM StateUpdate.worldUpdate worldUpdateTrigger
+    let worldChunkUpdates ← Event.mapM StateUpdate.worldChunkReady worldChunkReadyTrigger
+    let worldMeshUpdates ← Event.mapM StateUpdate.worldMeshReady worldMeshReadyTrigger
     let highlightUpdates ← Event.mapM StateUpdate.highlightUpdate highlightUpdateTrigger
 
     -- Merge all update sources
-    let allUpdates ← Event.leftmostM [frameUpdates, tabUpdates, blockUpdates, worldUpdates, highlightUpdates]
+    let allUpdates ← Event.leftmostM [
+      frameUpdates,
+      tabUpdates,
+      blockUpdates,
+      worldUpdates,
+      worldChunkUpdates,
+      worldMeshUpdates,
+      highlightUpdates
+    ]
+
+    -- Create world loading worker pool
+    let poolConfig : WorkerPoolConfig := { workerCount := 4 }
+    let (poolOutput, poolHandle) ← WorkerPool.fromCommandsWithShutdown
+      poolConfig
+      processWorldJob
+      worldCommandEvt
+
+    -- Forward pool results to state updates
+    let _ ← poolOutput.completed.subscribe fun (_, _, result) => do
+      match result with
+      | .chunk pending => fireWorldChunkReady pending
+      | .mesh pending => fireWorldMeshReady pending
+
+    -- Ignore duplicate job errors; log anything else
+    let _ ← poolOutput.errored.subscribe fun (_id, msg) => do
+      if msg != "duplicate job ID" then
+        IO.eprintln s!"World loader error: {msg}"
 
     -- Build the main state Dynamic using foldDynM
     let statesDyn ← foldDynM (fun update state => applyUpdate update state) initialStates allUpdates
@@ -269,13 +310,26 @@ def initCanopyWithTabs (fontRegistry : FontRegistry) (initialStates : SceneState
         performEvent_ tabAction
 
 
-    pure (events, inputs, render, fireTab, fireFrame, fireBlock, fireWorld, fireHighlight, statesDyn)
+    let worldLoader : WorldLoader := { fireCommand := fireWorldCommand, poolHandle := poolHandle }
+    pure (events, inputs, render, fireTab, fireFrame, fireBlock, fireWorld, fireHighlight, statesDyn, worldLoader)
   ).run spiderEnv
 
   -- Fire post-build event to finalize FRP network
   spiderEnv.postBuildTrigger ()
 
-  pure { spiderEnv, events, inputs, render, fireTabChange := fireTabChange, fireGameFrame := fireGameFrame, fireBlockSelect := fireBlockSelect, fireWorldUpdate := fireWorldUpdate, fireHighlightUpdate := fireHighlightUpdate, sceneStatesDyn := sceneStatesDyn }
+  pure {
+    spiderEnv
+    events
+    inputs
+    render
+    fireTabChange := fireTabChange
+    fireGameFrame := fireGameFrame
+    fireBlockSelect := fireBlockSelect
+    fireWorldUpdate := fireWorldUpdate
+    fireHighlightUpdate := fireHighlightUpdate
+    worldLoader := worldLoader
+    sceneStatesDyn := sceneStatesDyn
+  }
 
 def main : IO Unit := do
   IO.println "Cairn - Voxel Game (FRP Edition)"
@@ -455,12 +509,7 @@ def main : IO Unit := do
       -- Update world chunks based on camera position (fully async)
       let playerX := states.gameWorld.camera.x.floor.toInt64.toInt
       let playerZ := states.gameWorld.camera.z.floor.toInt64.toInt
-      states.gameWorld.world.requestChunksAround playerX playerZ
-      let world ← states.gameWorld.world.pollPendingChunks
-      world.requestMeshesAround playerX playerZ
-      let world ← world.pollPendingMeshes
-      -- Fire the updated world to the FRP network
-      canopy.fireWorldUpdate world
+      canopy.worldLoader.requestAround states.gameWorld.world playerX playerZ
     else
       -- Clear highlight when not in game world mode
       canopy.fireHighlightUpdate none
@@ -567,6 +616,7 @@ def main : IO Unit := do
 
   -- Cleanup
   IO.println "Cleaning up..."
+  canopy.worldLoader.poolHandle.shutdown
   debugFont.destroy
   canvas.destroy
   IO.println "Done!"

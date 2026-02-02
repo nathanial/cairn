@@ -97,6 +97,8 @@ inductive StateUpdate
   | tabChange (idx : Nat)
   | selectBlock (block : Block)
   | worldUpdate (world : World)
+  | worldChunkReady (pending : PendingChunk)
+  | worldMeshReady (pending : PendingMesh)
   | highlightUpdate (pos : Option (Int × Int × Int))
 
 end Cairn.State

@@ -6,7 +6,6 @@ import Cairn.Core.Block
 import Cairn.Core.Coords
 import Cairn.Core.Face
 import Batteries.Lean.HashMap
-import Std.Data.HashSet
 import Linalg
 
 namespace Cairn.World
@@ -75,11 +74,6 @@ structure World where
   meshes : Std.HashMap ChunkPos ChunkMesh
   terrainConfig : TerrainConfig
   renderDistance : Nat
-  -- Async terrain loading state
-  pendingChunks : IO.Ref (Array PendingChunk)
-  loadingChunks : IO.Ref (Std.HashSet ChunkPos)
-  -- Async mesh generation state
-  pendingMeshes : IO.Ref (Array PendingMesh)
-  meshingChunks : IO.Ref (Std.HashSet ChunkPos)
+  -- Async loading handled via FRP WorkerPool
 
 end Cairn.World

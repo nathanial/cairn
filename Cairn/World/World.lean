@@ -20,19 +20,11 @@ namespace World
 
 /-- Create empty world with async loading state -/
 def create (config : TerrainConfig := {}) (renderDist : Nat := 3) : IO World := do
-  let pendingChunks ← IO.mkRef #[]
-  let loadingChunks ← IO.mkRef {}
-  let pendingMeshes ← IO.mkRef #[]
-  let meshingChunks ← IO.mkRef {}
   return {
     chunks := {}
     meshes := {}
     terrainConfig := config
     renderDistance := renderDist
-    pendingChunks
-    loadingChunks
-    pendingMeshes
-    meshingChunks
   }
 
 /-- Create empty world. Alias for `create` for backward compatibility. -/
@@ -155,50 +147,6 @@ def setBlock (world : World) (pos : BlockPos) (block : Block) : World :=
                     & chunkAt pos.toChunkPos ∘ chunkIsDirty .~ true
   (neighborChunksForBlock pos).foldl markChunkDirty world
 
-/-! ## Async Chunk Loading -/
-
-/-- Request chunk generation (non-blocking). Spawns a background task. -/
-def requestChunk (world : World) (pos : ChunkPos) : IO Unit := do
-  -- Skip if already loaded
-  if (world ^? chunkAt pos).isSome then return
-
-  -- Skip if already in-flight
-  let loading ← world.loadingChunks.get
-  if loading.contains pos then return
-
-  -- Mark as loading
-  world.loadingChunks.modify (·.insert pos)
-
-  -- Spawn background task
-  let config := world ^. worldTerrainConfig
-  let pendingRef := world.pendingChunks
-  let loadingRef := world.loadingChunks
-  let _ ← IO.asTask (prio := .dedicated) do
-    let chunk := generateChunk config pos
-    pendingRef.modify (·.push { pos, chunk })
-    loadingRef.modify (·.erase pos)
-
-/-- Poll completed chunks and integrate them into World. Call once per frame. -/
-def pollPendingChunks (world : World) : IO World := do
-  let pending ← world.pendingChunks.modifyGet fun arr => (arr, #[])
-  let mut w := world
-  for p in pending do
-    w := w & worldChunks %~ (·.insert p.pos p.chunk)
-    w := markNeighborChunksDirty w p.pos
-  return w
-
-/-- Request chunks around position (non-blocking) -/
-def requestChunksAround (world : World) (centerX centerZ : Int) : IO Unit := do
-  let center := blockToChunkPos centerX centerZ
-  let renderDist := world ^. worldRenderDistance
-  let rd : Int := renderDist
-  for dxNat in [:renderDist * 2 + 1] do
-    for dzNat in [:renderDist * 2 + 1] do
-      let dx : Int := dxNat - rd
-      let dz : Int := dzNat - rd
-      let pos : ChunkPos := { x := center.x + dx, z := center.z + dz }
-      requestChunk world pos
-
 /-- Generate meshes for loaded chunks around position (synchronous) -/
 def ensureMeshesAround (world : World) (centerX centerZ : Int) : World := Id.run do
   let center := blockToChunkPos centerX centerZ
@@ -213,7 +161,7 @@ def ensureMeshesAround (world : World) (centerX centerZ : Int) : World := Id.run
       w := w.ensureMesh pos
   return w
 
-/-! ## Async Mesh Generation -/
+/-! ## Mesh Generation Helpers -/
 
 /-- Build chunk neighborhood snapshot for mesh generation -/
 def getChunkNeighborhood (world : World) (pos : ChunkPos) : Option ChunkNeighborhood :=
@@ -228,56 +176,18 @@ def getChunkNeighborhood (world : World) (pos : ChunkPos) : Option ChunkNeighbor
     }
   | none => none
 
-/-- Request mesh generation (non-blocking). Spawns a background task. -/
-def requestMesh (world : World) (pos : ChunkPos) : IO Unit := do
-  -- Skip if chunk not loaded or not dirty
-  match world ^? chunkAt pos ∘ chunkIsDirty with
-  | some true => pure ()  -- Continue
-  | some false =>
-    -- Not dirty - skip unless no mesh exists
-    if (world ^? meshAt pos).isSome then return
-  | none => return  -- Chunk not loaded
+/-! ## Async Integration Helpers -/
 
-  -- Skip if already being meshed
-  let meshing ← world.meshingChunks.get
-  if meshing.contains pos then return
+/-- Integrate a generated chunk into the world and mark neighbors dirty. -/
+def integratePendingChunk (world : World) (pending : PendingChunk) : World :=
+  let world := world & worldChunks %~ (·.insert pending.pos pending.chunk)
+  markNeighborChunksDirty world pending.pos
 
-  -- Get neighborhood snapshot
-  match getChunkNeighborhood world pos with
-  | some hood =>
-    -- Mark as meshing
-    world.meshingChunks.modify (·.insert pos)
-
-    -- Spawn background task
-    let pendingRef := world.pendingMeshes
-    let meshingRef := world.meshingChunks
-    let _ ← IO.asTask (prio := .dedicated) do
-      let mesh := generateMeshFromNeighborhood hood
-      pendingRef.modify (·.push { pos, mesh })
-      meshingRef.modify (·.erase pos)
-  | none => return
-
-/-- Poll completed meshes and integrate them into World. Call once per frame. -/
-def pollPendingMeshes (world : World) : IO World := do
-  let pending ← world.pendingMeshes.modifyGet fun arr => (arr, #[])
-  let mut w := world
-  for p in pending do
-    w := w & worldMeshes %~ (·.insert p.pos p.mesh)
-    -- Clear dirty flag
-    w := w & chunkAt p.pos ∘ chunkIsDirty .~ false
-  return w
-
-/-- Request mesh generation for chunks around position (non-blocking) -/
-def requestMeshesAround (world : World) (centerX centerZ : Int) : IO Unit := do
-  let center := blockToChunkPos centerX centerZ
-  let renderDist := world ^. worldRenderDistance
-  let rd : Int := renderDist
-  for dxNat in [:renderDist * 2 + 1] do
-    for dzNat in [:renderDist * 2 + 1] do
-      let dx : Int := dxNat - rd
-      let dz : Int := dzNat - rd
-      let pos : ChunkPos := { x := center.x + dx, z := center.z + dz }
-      requestMesh world pos
+/-- Integrate a generated mesh into the world and clear dirty flag. -/
+def integratePendingMesh (world : World) (pending : PendingMesh) : World :=
+  world
+    & worldMeshes %~ (·.insert pending.pos pending.mesh)
+    & chunkAt pending.pos ∘ chunkIsDirty .~ false
 
 end World
 
