@@ -243,6 +243,7 @@ def updatePlayer (world : World)
   -- Convert feet back to camera position
   let newCamY := newFeetY + eyeOffset
 
-  return (newX, newCamY, newZ, newVx, newVy, finalVy, nowGrounded)
+  -- Return post-collision Y velocity; Z velocity remains the desired horizontal speed.
+  return (newX, newCamY, newZ, newVx, finalVy, newVz, nowGrounded)
 
 end Cairn.Physics
