@@ -70,6 +70,7 @@ structure SceneStates where
   velocityY : Float
   velocityZ : Float
   isGrounded : Bool
+  lastUnloadChunk : Option ChunkPos := none
 
 namespace SceneStates
 

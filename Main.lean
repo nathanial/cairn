@@ -81,22 +81,43 @@ private def applyFrameUpdate (fi : GameFrameInput) (states : SceneStates) : Scen
   match states.activeMode with
   | .gameWorld =>
     let camera := updateCameraLook states.gameWorld.camera input
-    if input.pointerLocked then
-      let flyMode := states.gameWorld.flyMode
-      if flyMode then
-        let (newX, newY, newZ) := Cairn.Physics.updatePlayerFly camera.x camera.y camera.z camera.yaw input dt
-        let newCamera := { camera with x := newX, y := newY, z := newZ }
-        { states with gameWorld := { states.gameWorld with camera := newCamera } }
+    let (newCamera, newVx, newVy, newVz, nowGrounded) :=
+      if input.pointerLocked then
+        let flyMode := states.gameWorld.flyMode
+        if flyMode then
+          let (newX, newY, newZ) := Cairn.Physics.updatePlayerFly camera.x camera.y camera.z camera.yaw input dt
+          ({ camera with x := newX, y := newY, z := newZ }, states.velocityX, states.velocityY, states.velocityZ, states.isGrounded)
+        else
+          let (newX, newY, newZ, nextVx, nextVy, nextVz, nextGrounded) :=
+            Cairn.Physics.updatePlayer states.gameWorld.world
+              camera.x camera.y camera.z
+              states.velocityX states.velocityY states.velocityZ states.isGrounded
+              camera.yaw input dt
+          ({ camera with x := newX, y := newY, z := newZ }, nextVx, nextVy, nextVz, nextGrounded)
       else
-        let (newX, newY, newZ, newVx, newVy, newVz, nowGrounded) :=
-          Cairn.Physics.updatePlayer states.gameWorld.world
-            camera.x camera.y camera.z
-            states.velocityX states.velocityY states.velocityZ states.isGrounded
-            camera.yaw input dt
-        let newCamera := { camera with x := newX, y := newY, z := newZ }
-        { states with gameWorld := { states.gameWorld with camera := newCamera }, velocityX := newVx, velocityY := newVy, velocityZ := newVz, isGrounded := nowGrounded }
-    else
-      { states with gameWorld := { states.gameWorld with camera := camera } }
+        (camera, states.velocityX, states.velocityY, states.velocityZ, states.isGrounded)
+
+    let playerX := newCamera.x.floor.toInt64.toInt
+    let playerZ := newCamera.z.floor.toInt64.toInt
+    let currentChunk := World.blockToChunkPos playerX playerZ
+    let (world', lastUnloadChunk') :=
+      match states.lastUnloadChunk with
+      | some lastChunk =>
+        if lastChunk == currentChunk then
+          (states.gameWorld.world, some lastChunk)
+        else
+          (World.unloadDistantChunks states.gameWorld.world playerX playerZ, some currentChunk)
+      | none =>
+        (World.unloadDistantChunks states.gameWorld.world playerX playerZ, some currentChunk)
+
+    { states with
+        gameWorld := { states.gameWorld with camera := newCamera, world := world' }
+        velocityX := newVx
+        velocityY := newVy
+        velocityZ := newVz
+        isGrounded := nowGrounded
+        lastUnloadChunk := lastUnloadChunk'
+    }
   | .solidChunk =>
     let camera := updateCameraLook states.solidChunk.camera input
     if input.pointerLocked then
@@ -419,6 +440,9 @@ def main : IO Unit := do
     velocityY := 0.0
     velocityZ := 0.0
     isGrounded := false
+    lastUnloadChunk := some (World.blockToChunkPos
+      gameState.camera.x.floor.toInt64.toInt
+      gameState.camera.z.floor.toInt64.toInt)
   }
 
   -- Initialize Canopy FRP infrastructure with tabs
