@@ -162,6 +162,59 @@ def voxelSceneWidgetFRP (statesDyn : Dynamic Spider SceneStates) (config : Voxel
     skipCache := true
   }) (style := BoxStyle.fill)
 
+/-- Tab view variant that allows overriding layout dimensions. -/
+private def tabViewWithDims (tabs : Array TabDef) (initialTab : Nat := 0)
+    (dims : Afferent.Canopy.TabView.Dimensions := {}) : WidgetM TabViewResult := do
+  let theme ← Afferent.Canopy.Reactive.getThemeW
+  let containerName ← Afferent.Canopy.Reactive.registerComponentW "tabview" (isInteractive := false)
+
+  let mut headerNames : Array String := #[]
+  for _ in tabs do
+    let name ← Afferent.Canopy.Reactive.registerComponentW "tab-header"
+    headerNames := headerNames.push name
+  let headerNameFn (i : Nat) : String := headerNames.getD i ""
+
+  -- Pre-run all tab contents to get their renders
+  let mut tabContentRenders : Array (Array ComponentRender) := #[]
+  for tab in tabs do
+    let (_, renders) ← Afferent.Canopy.Reactive.runWidgetChildren tab.content
+    tabContentRenders := tabContentRenders.push renders
+
+  let allClicks ← Afferent.Canopy.Reactive.useAllClicks
+
+  let findClickedTab (data : Afferent.Canopy.Reactive.ClickData) : Option Nat :=
+    (List.range tabs.size).findSome? fun i =>
+      if Afferent.Canopy.Reactive.hitWidget data (headerNameFn i) then some i else none
+
+  let tabChanges ← Event.mapMaybeM findClickedTab allClicks
+  let activeTab ← Reactive.holdDyn initialTab tabChanges
+  let onTabChange := tabChanges
+
+  let hoverChanges ← StateT.lift (Afferent.Canopy.Reactive.hoverIndexEvent headerNames)
+  let hoveredTab ← Reactive.holdDyn none hoverChanges
+
+  let tabsRef := tabs
+
+  -- Use dynWidget for efficient change-driven rebuilds
+  let renderState ← Dynamic.zipWithM (fun a h => (a, h)) activeTab hoveredTab
+  let _ ← dynWidget renderState fun (active, hovered) => do
+    emit do
+      let mut tabDefs : Array (String × Afferent.Arbor.WidgetBuilder) := #[]
+      for i in [:tabsRef.size] do
+        let tab := tabsRef[i]!
+        let renders := tabContentRenders[i]!
+        let contentWidgets ← renders.mapM id
+        let contentStyle : BoxStyle := {
+          flexItem := some (Trellis.FlexItem.growing 1)
+          width := .percent 1.0
+          height := .percent 1.0
+        }
+        let content := Afferent.Arbor.column (gap := 0) (style := contentStyle) contentWidgets
+        tabDefs := tabDefs.push (tab.label, content)
+      pure (Afferent.Canopy.tabViewVisual containerName headerNameFn tabDefs active hovered theme dims)
+
+  pure { onTabChange, activeTab }
+
 /-- Initialize Canopy FRP infrastructure with tab view and reactive state -/
 def initCanopyWithTabs (fontRegistry : FontRegistry) (initialStates : SceneStates) : IO CanopyState := do
   -- Create SpiderEnv (keeps FRP network alive)
@@ -195,25 +248,25 @@ def initCanopyWithTabs (fontRegistry : FontRegistry) (initialStates : SceneState
     -- Build widget tree using WidgetM
     let (_, render) ← Afferent.Canopy.Reactive.ReactiveM.run events do
       runWidget do
+        let sceneContent : WidgetM Unit := do
+          emit (pure (voxelSceneWidgetFRP statesDyn {}))
+
         -- Define tabs
         let tabs : Array TabDef := #[
-          { label := "Game World", content := pure () },
-          { label := "Solid Chunk", content := pure () },
-          { label := "Single Block", content := pure () },
-          { label := "Terrain Preview", content := pure () }
+          { label := "Game World", content := sceneContent },
+          { label := "Solid Chunk", content := sceneContent },
+          { label := "Single Block", content := sceneContent },
+          { label := "Terrain Preview", content := sceneContent }
         ]
 
         -- Create tab view widget
-        let tabResult ← tabView tabs 0
+        let tabResult ← tabViewWithDims tabs 0 (dims := { contentPadding := 0 })
 
         -- Subscribe to tab changes and fire to the trigger (which feeds foldDynM)
         let tabAction ← Event.mapM (fun tabIdx => do
           fireTab tabIdx
         ) tabResult.onTabChange
         performEvent_ tabAction
-
-        -- Emit the voxel scene widget that samples the Dynamic
-        emit (pure (voxelSceneWidgetFRP statesDyn {}))
 
 
     pure (events, inputs, render, fireTab, fireFrame, fireBlock, fireWorld, fireHighlight, statesDyn)
@@ -412,8 +465,8 @@ def main : IO Unit := do
       -- Clear highlight when not in game world mode
       canopy.fireHighlightUpdate none
 
-    -- Begin frame with sky blue background
-    let ok ← canvas.beginFrame (Color.rgba 0.5 0.7 1.0 1.0)
+    -- Begin frame with dark gray background (match afferent-demos)
+    let ok ← canvas.beginFrame Color.darkGray
 
     if ok then
       -- Get current window size for aspect ratio
