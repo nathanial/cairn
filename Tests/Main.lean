@@ -123,6 +123,14 @@ test "negative Z coordinates" := do
   ensure ((BlockPos.mk 0 0 (-16)).toChunkPos == { x := 0, z := -1 }) "z=-16 → chunk z=-1"
   ensure ((BlockPos.mk 0 0 (-17)).toChunkPos == { x := 0, z := -2 }) "z=-17 → chunk z=-2"
 
+test "negative Y treated as air" := do
+  let mut world ← World.empty {} 1
+  let chunkPos : ChunkPos := { x := 0, z := 0 }
+  world := world & worldChunks %~ (·.insert chunkPos (Chunk.empty chunkPos))
+  let pos : BlockPos := { x := 0, y := -1, z := 0 }
+  world := World.setBlock world pos Block.stone
+  ensure (World.getBlock world pos == Block.air) "negative y should be air"
+
 testSuite "Generated Lens Tests"
 
 test "ChunkPos lenses work" := do

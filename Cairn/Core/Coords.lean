@@ -81,11 +81,23 @@ def toChunkPos (pos : BlockPos) : ChunkPos :=
   { x := floorDiv pos.x chunkSize
   , z := floorDiv pos.z chunkSize }
 
-/-- Convert world block position to local position within its chunk -/
+/-- Convert world block position to local position within its chunk.
+    Note: negative Y values clamp to 0; use `toLocalPos?` for bounds checks. -/
 def toLocalPos (pos : BlockPos) : LocalPos :=
   { x := posMod pos.x chunkSize
   , y := pos.y.toNat  -- Y is always positive
   , z := posMod pos.z chunkSize }
+
+/-- Convert world block position to local position if Y is within [0, chunkHeight). -/
+def toLocalPos? (pos : BlockPos) : Option LocalPos :=
+  if pos.y < 0 || pos.y >= chunkHeight then
+    none
+  else
+    some {
+      x := posMod pos.x chunkSize
+      y := pos.y.toNat
+      z := posMod pos.z chunkSize
+    }
 
 /-- Decompose into chunk and local position -/
 def decompose (pos : BlockPos) : WorldPos :=

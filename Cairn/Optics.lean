@@ -52,7 +52,12 @@ def meshAt (pos : ChunkPos) : AffineTraversal' World ChunkMesh :=
 /-- Affine traversal for accessing a block at a world position.
     Composes chunk lookup with local block access. -/
 def blockAt (pos : BlockPos) : AffineTraversal' World Block :=
-  chunkAt pos.toChunkPos ∘ localBlockAt pos.toLocalPos
+  match pos.toLocalPos? with
+  | some localPos => chunkAt pos.toChunkPos ∘ localBlockAt localPos
+  | none =>
+    Collimator.Combinators.affineFromPartial
+      (fun _ => none)
+      (fun world _ => world)
 
 /-- Affine traversal for accessing a block via WorldPos.
     Composes chunk lookup with local block access. -/
